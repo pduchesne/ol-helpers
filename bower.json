@@ -13,6 +13,6 @@
   ],
   "dependencies": {
     "underscore": ">=1.4.2",
-    "openlayers": "http://openlayers.org/api/2.13.1/OpenLayers.js"
+    "openlayers2": "pduchesne/ol2-bower"
   }
 }
