@@ -1,0 +1,17 @@
+{
+  "name": "ol-helpers",
+  "description": "Handy glue code for Openlayers",
+  "version": "1.0.0",
+  "keywords": [
+    "openlayers",
+    "geo",
+    "web"
+  ],
+  "main": [
+    "ol-helpers.js"
+  ],
+  "dependencies": {
+    "underscore": ">=1.4.2",
+    "openlayers": "http://openlayers.org/api/2.13.1/OpenLayers.js"
+  }
+}
