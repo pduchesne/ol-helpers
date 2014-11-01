@@ -8,9 +8,9 @@
 
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
 
-    var EPSG4326 = new OpenLayers.Projection("EPSG:4326")
-    var Mercator = new OpenLayers.Projection("EPSG:3857")
-    var CRS84 = new OpenLayers.Projection("urn:x-ogc:def:crs:EPSG:4326")
+    var EPSG4326 = OL_HELPERS.EPSG4326 = new OpenLayers.Projection("EPSG:4326")
+    var Mercator = OL_HELPERS.Mercator = new OpenLayers.Projection("EPSG:3857")
+    var CRS84 = OL_HELPERS.CRS84 = new OpenLayers.Projection("urn:x-ogc:def:crs:EPSG:4326")
 
     var MAX_FEATURES = 300
 
