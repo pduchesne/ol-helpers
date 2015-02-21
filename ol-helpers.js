@@ -456,8 +456,8 @@
         var template = {
             fillColor: "${getColor}", // using context.getColor(feature)
             fillOpacity: 0.6,
-            strokeColor: "${getColor}",
-            strokeWidth: 1
+            strokeColor: "#404040",
+            strokeWidth: 0.5
         };
 
         var esrijson = new OpenLayers.Layer.Vector(
@@ -465,8 +465,10 @@
             {
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                visibility: visible,
-                styleMap: new OpenLayers.StyleMap(new OpenLayers.Style(template, {context: context})),
+                visibiliteepy: visible,
+                styleMap: new OpenLayers.StyleMap({
+                    'default': new OpenLayers.Style(template, {context: context})
+                }),
                 protocol: new OpenLayers.Protocol.Script({
                     url: url +   //build ArcGIS Server query string
                         "/query?dummy=1&" +
