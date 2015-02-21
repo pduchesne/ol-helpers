@@ -448,15 +448,28 @@
 
     OL_HELPERS.createArcgisFeatureLayer = function (url, descriptor, visible) {
 
+        var context = {
+            getColor: function(feature) {
+                return (feature.data.RGB && "rgb("+feature.data.RGB+")") || "#ee9900"
+            }
+        };
+        var template = {
+            fillColor: "${getColor}", // using context.getColor(feature)
+            fillOpacity: 0.6,
+            strokeColor: "${getColor}",
+            strokeWidth: 1
+        };
+
         var esrijson = new OpenLayers.Layer.Vector(
             descriptor.name,
             {
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
                 visibility: visible,
+                styleMap: new OpenLayers.StyleMap(new OpenLayers.Style(template, {context: context})),
                 protocol: new OpenLayers.Protocol.Script({
                     url: url +   //build ArcGIS Server query string
-                        "/query?dummy=1&" +  //TODO this needed bc first param gets trashed for whatever reason
+                        "/query?dummy=1&" +
                         //"geometry=-180%2C-90%2C180%2C90&" +
                         "geometryType=esriGeometryEnvelope&" +
                         "inSR=4326&" +
