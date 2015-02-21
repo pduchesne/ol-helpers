@@ -456,7 +456,7 @@
                 visibility: visible,
                 protocol: new OpenLayers.Protocol.Script({
                     url: url +   //build ArcGIS Server query string
-                        "/query?" +
+                        "/query?dummy=1&" +  //TODO this needed bc first param gets trashed for whatever reason
                         //"geometry=-180%2C-90%2C180%2C90&" +
                         "geometryType=esriGeometryEnvelope&" +
                         "inSR=4326&" +
