@@ -419,14 +419,14 @@
         return esrijson
     }
 
-    OL_HELPERS.withArcGisLayers = function (url, layerProcessor, layerName) {
+    OL_HELPERS.withArcGisLayers = function (url, layerProcessor, layerName, layerBaseUrl) {
 
         parseArcGisDescriptor(
             url,
             function (descriptor) {
 
                 if (descriptor.type == "Feature Layer") {
-                    var newLayer = OL_HELPERS.createArcgisFeatureLayer(url, descriptor, true)
+                    var newLayer = OL_HELPERS.createArcgisFeatureLayer(layerBaseUrl || url, descriptor, true)
                     layerProcessor(newLayer)
                 } else if (descriptor.type == "Group Layer") {
                     // TODO intermediate layer
@@ -434,7 +434,7 @@
                     var isFirst = true
                     $_.each(descriptor.layers, function (layer, idx) {
                         if (!layer.subLayerIds) {
-                            var newLayer = OL_HELPERS.createArcgisFeatureLayer(url + "/" + layer.id, layer, isFirst)
+                            var newLayer = OL_HELPERS.createArcgisFeatureLayer(layerBaseUrl || url + "/" + layer.id, layer, isFirst)
                             layerProcessor(newLayer)
                             isFirst = false
                         }
@@ -465,7 +465,7 @@
             {
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                visibiliteepy: visible,
+                visibility: visible,
                 styleMap: new OpenLayers.StyleMap({
                     'default': new OpenLayers.Style(template, {context: context})
                 }),
