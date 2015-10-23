@@ -434,7 +434,7 @@
                     var isFirst = true
                     $_.each(descriptor.layers, function (layer, idx) {
                         if (!layer.subLayerIds) {
-                            var newLayer = OL_HELPERS.createArcgisFeatureLayer(layerBaseUrl || url + "/" + layer.id, layer, isFirst)
+                            var newLayer = OL_HELPERS.createArcgisFeatureLayer((layerBaseUrl || url) + "/" + layer.id, layer, isFirst)
                             layerProcessor(newLayer)
                             isFirst = false
                         }
