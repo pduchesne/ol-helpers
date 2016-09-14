@@ -204,7 +204,7 @@
         });
     }
 
-    var parseWMTSCapas = function (url, callback, failCallback) {
+    OL_HELPERS.parseWMTSCapas = function (url, callback, failCallback) {
         var wmtsFormat = new OpenLayers.Format.WMTSCapabilities();
 
         OpenLayers.Request.GET({
