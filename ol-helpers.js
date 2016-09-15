@@ -1,5 +1,15 @@
 // Openlayers preview module
 
+if (proj4) {
+    window.Proj4js = {
+        Proj: function (code) {
+            return proj4(Proj4js.defs[code]);
+        },
+        defs: proj4.defs,
+        transform: proj4
+    };
+}
+
 (function() {
 
     // Establish the root object, `window` in the browser, or `global` on the server.
@@ -10,7 +20,6 @@
 
     var EPSG4326 = OL_HELPERS.EPSG4326 = new OpenLayers.Projection("EPSG:4326")
     var Mercator = OL_HELPERS.Mercator = new OpenLayers.Projection("EPSG:3857")
-    var CRS84 = OL_HELPERS.CRS84 = new OpenLayers.Projection("urn:x-ogc:def:crs:EPSG:4326")
 
     var MAX_FEATURES = 300
 
