@@ -81,6 +81,17 @@ if (proj4) {
         }
     )
 
+    OpenLayers.Layer.WMTSLayer = OpenLayers.Class(OpenLayers.Layer.WMTS,
+        {
+            getDataExtent: function () {
+                return (this.mlDescr &&
+                    this.mlDescr.bounds &&
+                    this.mlDescr.bounds.transform(EPSG4326, this.map.getProjectionObject()))
+                    || OpenLayers.Layer.WMTS.prototype.getDataExtent.call(this, arguments)
+            }
+        }
+    )
+
     /**
      * Parse a comma-separated set of KVP, typically for URL query or fragments
      * @param url
@@ -413,6 +424,43 @@ if (proj4) {
         )
 
     }
+
+
+    OL_HELPERS.withWMTSLayers = function (capaUrl, layerProcessor, layerName) {
+
+        OL_HELPERS.parseWMTSCapas(
+            capaUrl,
+            function (capas) {
+
+                var candidates = capas.contents.layers
+                if (layerName) candidates = candidates.filter(function (layer) {
+                    return layer.name == layerName
+                })
+
+                var ver = capas.version
+
+                $_.each(candidates, function (candidate, idx) {
+                    var mapLayer = new OpenLayers.Format.WMTSCapabilities().createLayer(
+                        capas,
+                        {
+                            mlDescr: candidate,
+                            name: candidate.title,
+                            layer: candidate.identifier,
+                            //format: "image/png",  // TODO take format from layer descriptor
+                            isBaseLayer: false
+                        }
+                    );
+
+                    mapLayer.getDataExtent = OpenLayers.Layer.WMTSLayer.prototype.getDataExtent
+
+                    layerProcessor(mapLayer)
+                })
+
+            }
+        )
+
+    }
+
 
     OL_HELPERS.createGeoJSONLayer = function (url) {
 
