@@ -1,6 +1,6 @@
 // Openlayers preview module
 
-if (proj4) {
+if (typeof proj4 != "undefined" && proj4) {
     window.Proj4js = {
         Proj: function (code) {
             return proj4(Proj4js.defs[code]);
