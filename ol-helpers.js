@@ -379,7 +379,9 @@ if (typeof proj4 != "undefined" && proj4) {
                                                 typeName: candidate.prefixedName || candidate.name,
                                                 maxFeatures: MAX_FEATURES,
                                                 srsName: map ? map.getProjectionObject() : Mercator,
-                                                //outputFormat: "gml2"
+                                                // TODO check capabilities for supported outputFormats
+                                                //      some impls expose a long-form expression of GML2/3
+                                                outputFormat: "gml2"
                                             },
                                             format: new OpenLayers.Format.GML({
                                                 featureNS: candidate.featureNS,
