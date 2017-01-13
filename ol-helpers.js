@@ -433,7 +433,7 @@ if (typeof proj4 != "undefined" && proj4) {
     }
 
 
-    OL_HELPERS.withWMSLayers = function (capaUrl, getMapUrl, layerProcessor, layerName, useTiling) {
+    OL_HELPERS.withWMSLayers = function (capaUrl, getMapUrl, layerProcessor, layerName, useTiling, map) {
 
         parseWMSCapas(
             capaUrl,
@@ -451,14 +451,26 @@ if (typeof proj4 != "undefined" && proj4) {
                         candidate.name,
                         getMapUrl,
                         {layers: candidate.name,
-                            transparent: true},
+                         transparent: true,
+                         version: ver,
+                         EXCEPTIONS:"INIMAGE"},
                         {mlDescr: candidate,
                             title: candidate.title,
                             baseLayer: false,
                             singleTile: !useTiling,
                             visibility: idx == 0,
-                            projection: Mercator, // force SRS to 3857 if using OSM baselayer
-                            ratio: 1
+                            projection: map ? map.getProjectionObject() : Mercator, // force SRS to 3857 if using OSM baselayer
+                            ratio: 1,/*
+                            protocol: new OpenLayers.Protocol.WMS({
+                                version: ver,
+                                url: url,
+                                featureType: candidate.name,
+                                srsName: map ? map.getProjectionObject() : Mercator,
+                                featureNS: candidate.featureNS,
+                                maxFeatures: MAX_FEATURES,
+                                geometryName: geomProps[0].name
+                            })
+                            */
                         }
                     )
 
