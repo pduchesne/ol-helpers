@@ -93,6 +93,128 @@ if (typeof proj4 != "undefined" && proj4) {
         }
     )
 
+    OpenLayers.Control.HilatsLayerSwitcher = OpenLayers.Class(OpenLayers.Control.LayerSwitcher,
+        {
+            /**
+             * Constructor: OpenLayers.Control.LayerSwitcher
+             *
+             * Parameters:
+             * options - {Object}
+             */
+            initialize: function(options) {
+                OpenLayers.Control.LayerSwitcher.prototype.initialize.apply(this, arguments)
+                this.baselayers = options.baselayers
+            },
+
+            redraw: function () {
+                //if the state hasn't changed since last redraw, no need
+                // to do anything. Just return the existing div.
+                if (!this.checkRedraw()) {
+                    return this.div;
+                }
+
+                //clear out previous layers
+                this.clearLayersArray("base");
+                this.clearLayersArray("data");
+
+                var containsOverlays = false;
+                var containsBaseLayers = false;
+
+                // Save state -- for checking layer if the map state changed.
+                // We save this before redrawing, because in the process of redrawing
+                // we will trigger more visibility changes, and we want to not redraw
+                // and enter an infinite loop.
+                this.layerStates = this.map.layers.map(function (layer) {
+                    return {
+                        'name': layer.name,
+                        'visibility': layer.visibility,
+                        'inRange': layer.inRange,
+                        'id': layer.id
+                    };
+                })
+
+                var layers = this.map.layers.slice().filter(function (layer) {
+                    return layer.displayInLayerSwitcher
+                });
+                if (!this.ascending) {
+                    layers.reverse();
+                }
+
+                for (var i = 0; i < layers.length; i++) {
+                    var layer = layers[i];
+                    var baseLayer = layer.isBaseLayer;
+
+                    if (baseLayer) containsBaseLayers = true;
+                    else containsOverlays = true;
+
+                    // only check a baselayer if it is *the* baselayer, check data
+                    //  layers if they are visible
+                    var checked = (baseLayer) ? (layer == this.map.baseLayer) : layer.getVisibility();
+
+                    // create input element
+                    var inputElem = document.createElement("input"),
+                    // The input shall have an id attribute so we can use
+                    // labels to interact with them.
+                        inputId = OpenLayers.Util.createUniqueID(this.id + "_input_");
+
+                    inputElem.id = inputId;
+                    inputElem.name = (baseLayer) ? this.id + "_baseLayers" : layer.name;
+                    inputElem.type = (baseLayer) ? "radio" : "checkbox";
+                    inputElem.value = layer.name;
+                    inputElem.checked = checked;
+                    inputElem.defaultChecked = checked;
+                    inputElem.className = "olButton";
+                    inputElem._layer = layer.id;
+                    inputElem._layerSwitcher = this.id;
+                    inputElem.disabled = !baseLayer && !layer.inRange;
+
+                    // create span
+                    var labelSpan = document.createElement("label");
+                    // this isn't the DOM attribute 'for', but an arbitrary name we
+                    // use to find the appropriate input element in <onButtonClick>
+                    labelSpan["for"] = inputElem.id;
+                    OpenLayers.Element.addClass(labelSpan, "labelSpan olButton");
+                    labelSpan._layer = layer.id;
+                    labelSpan._layerSwitcher = this.id;
+                    if (!baseLayer && !layer.inRange) {
+                        labelSpan.style.color = "gray";
+                    }
+                    labelSpan.innerHTML = layer.title || layer.name;
+                    labelSpan.style.verticalAlign = (baseLayer) ? "bottom"
+                        : "baseline";
+
+
+                    var groupArray = (baseLayer) ? this.baseLayers
+                        : this.dataLayers;
+                    groupArray.push({
+                        'layer': layer,
+                        'inputElem': inputElem,
+                        'labelSpan': labelSpan
+                    });
+
+
+                    var groupDiv = $((baseLayer) ? this.baseLayersDiv
+                        : this.dataLayersDiv);
+                    groupDiv.append($("<div></div>").append($(inputElem)).append($(labelSpan)));
+                }
+
+                // if no overlays, dont display the overlay label
+                this.dataLbl.style.display = (containsOverlays) ? "" : "none";
+
+                // if no baselayers, dont display the baselayer label
+                this.baseLbl.style.display = (containsBaseLayers) ? "" : "none";
+
+                // hide baselayers list if multiple basemaps config
+                if (this.baselayers && this.baselayers.length>1) {
+                    this.baseLbl.style.display = "none";
+                    this.baseLayersDiv.style.display = "none";
+                }
+
+                return this.div;
+            }
+        }
+    );
+
     /**
      * Parse a comma-separated set of KVP, typically for URL query or fragments
      * @param url
@@ -678,6 +800,109 @@ if (typeof proj4 != "undefined" && proj4) {
             }
         });
     };
+
+    OL_HELPERS.createLayerFromConfig = function(mapConfig, isBaseLayer, callback) {
+        var urls;
+        var attribution;
+
+
+        if (mapConfig.type == 'osm') {
+
+            var baseMapLayer = new OpenLayers.Layer.OSM(
+                null,
+                null,
+                {
+                    title: 'OSM Base Layer',
+                    isBaseLayer: isBaseLayer,
+                    transitionEffect: 'resize'
+                }
+            );
+
+            callback (baseMapLayer);
+
+        } else if (mapConfig.type == 'tms') {
+
+            urls = mapConfig['url'];
+            if (!urls)
+                throw 'TMS URL must be set when using TMS Map type';
+            var projection = mapConfig['srs'] ? new OpenLayers.Projection(mapConfig['srs']) : OL_HELPERS.Mercator // force SRS to 3857 if using OSM baselayer
+            var maxExtent = mapConfig['extent'] && eval(mapConfig['extent'])
+
+            var baseMapLayer = new OpenLayers.Layer.TMS('Base Layer', urls, {
+                isBaseLayer: isBaseLayer,
+                //wrapDateLine: true,
+                projection: projection,
+                maxExtent: maxExtent,
+                attribution: mapConfig.attribution,
+                // take lower left corner as default origin
+                tileOrigin: new OpenLayers.LonLat(maxExtent[0], maxExtent[1]),
+                //units:"m",
+                layername:mapConfig['layername'],
+                type:'png',
+                resolutions: mapConfig['resolutions'] && eval(mapConfig['resolutions'])
+                //zoomOffset: 5
+            });
+
+            callback (baseMapLayer);
+        }  else if (mapConfig.type == 'XYZ') {
+            // Custom XYZ layer
+            urls = mapConfig['url'];
+            if (!urls)
+                throw 'URL must be set when using XYZ type';
+            if (urls.indexOf('${x}') === -1) {
+                urls = urls.replace('{x}', '${x}').replace('{y}', '${y}').replace('{z}', '${z}');
+            }
+            var baseMapLayer = new OpenLayers.Layer.XYZ('Base Layer', urls, {
+                isBaseLayer: isBaseLayer,
+                sphericalMercator: true,
+                wrapDateLine: true,
+                attribution: mapConfig.attribution
+            });
+
+            callback (baseMapLayer);
+        }  else if (mapConfig.type == 'wmts') {
+
+            OL_HELPERS.withWMTSLayers(
+                '/basemap_service/wmts',
+                function(layer) {
+                    layer.isBaseLayer = true
+                    layer.options.attribution = mapConfig.attribution
+                    layer.maxExtent = layer.mlDescr.bounds.transform(OL_HELPERS.EPSG4326, layer.projection)
+
+                    callback (layer);
+                },
+                mapConfig['layer'],
+                mapConfig['srs']
+            )
+
+        } else if (mapConfig.type == 'wms') {
+            urls = mapConfig['url'];
+            if (!urls)
+                throw 'WMS URL must be set when using WMS Map type';
+
+            var baseMapLayer = new OpenLayers.Layer.WMSLayer(
+                mapConfig['layer'],
+                urls,
+                {layers: mapConfig['layer'],
+                    transparent: true},
+                {
+                    title: 'Base Layer',
+                    isBaseLayer: true,
+                    singleTile: true,
+                    visibility: true,
+                    projection: mapConfig['srs'] ? new OpenLayers.Projection(mapConfig['srs']) : OL_HELPERS.Mercator, // force SRS to 3857 if using OSM baselayer
+                    ratio: 1,
+                    maxExtent: mapConfig['extent'] && eval(mapConfig['extent'])
+                }
+            )
+
+            callback (baseMapLayer);
+
+        }
+
+
+
+    }
 
 }) ();
 
