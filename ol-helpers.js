@@ -30,12 +30,21 @@ if (typeof proj4 != "undefined" && proj4) {
      default_style.strokeWidth = "2";
      */
 
-
-    // override the XMLHttpRequest to enforce UTF-8 decoding
-    // because some WFS respond with UTF-8 answers while advertising ISO encoding in the headers
     var originalXHR = OpenLayers.Request.XMLHttpRequest
     OpenLayers.Request.XMLHttpRequest = function () {
         var newXHR = new originalXHR()
+
+        // [taken from @letmaik patch on ckanext-geoview]
+        // monkey-patch OL2 to get CORS working properly
+        // see https://github.com/ckan/ckanext-geoview/issues/28
+        var oldSRH = newXHR.setRequestHeader
+        newXHR.setRequestHeader = function (sName, sValue) {
+            if (sName === 'X-Requested-With') return;
+            oldSRH.call(newXHR, sName, sValue)
+        }
+
+        // override the XMLHttpRequest to enforce UTF-8 decoding
+        // because some WFS respond with UTF-8 answers while advertising ISO encoding in the headers
         if (newXHR._object && newXHR._object.overrideMimeType) newXHR._object.overrideMimeType('text/xml; charset=UTF-8')
         return newXHR
     }
@@ -64,7 +73,7 @@ if (typeof proj4 != "undefined" && proj4) {
             getDataExtent: function () {
                 var bbox = this.ftDescr &&
                     (this.ftDescr.bounds || // WFS 1.1+
-                     (this.ftDescr.latLongBoundingBox && new OpenLayers.Bounds(this.ftDescr.latLongBoundingBox))) // WFS 1.0
+                        (this.ftDescr.latLongBoundingBox && new OpenLayers.Bounds(this.ftDescr.latLongBoundingBox))) // WFS 1.0
                 return (bbox && bbox.transform(EPSG4326, this.map.getProjectionObject()))
                     || OpenLayers.Layer.Vector.prototype.getDataExtent.call(this, arguments)
             }
@@ -463,6 +472,8 @@ if (typeof proj4 != "undefined" && proj4) {
 
     OL_HELPERS.withFeatureTypesLayers = function (url, layerProcessor, ftName, map, useGET) {
 
+        var deferredResult = $.Deferred()
+
         parseWFSCapas(
             url,
             function (capas) {
@@ -475,21 +486,28 @@ if (typeof proj4 != "undefined" && proj4) {
                     return ft.name == ftName
                 })
 
+                var deferredLayers = []
+
                 $_.each(candidates, function (candidate, idx) {
+
+                    var deferredLayer = $.Deferred()
+                    deferredLayers.push(deferredLayer)
+
                     parseWFSFeatureTypeDescr(
                         url,
                             candidate.prefixedName || candidate.name,
                         ver,
                         function (descr) {
+                            var ftLayer
+
                             if (descr.featureTypes) {
+
                                 var geomProps = descr.featureTypes[0].properties.filter(function (prop) {
                                     return prop.type.startsWith("gml")
                                 })
 
                                 // ignore feature types with no gml prop. Correct ?
                                 if (geomProps && geomProps.length > 0) {
-
-                                    var ftLayer
 
                                     if (useGET) {
                                         var wfs_options = {
@@ -546,16 +564,26 @@ if (typeof proj4 != "undefined" && proj4) {
                                     layerProcessor(ftLayer)
                                 }
                             }
+
+                            deferredLayer.resolve(ftLayer)
                         }
                     )
                 })
 
+                $.when.apply($, deferredLayers).done(function() {
+                    deferredResult.resolve(deferredLayers)
+                })
+
             }
         )
+
+        return deferredResult;
     }
 
 
     OL_HELPERS.withWMSLayers = function (capaUrl, getMapUrl, layerProcessor, layerName, useTiling, map) {
+
+        var deferredResult = $.Deferred()
 
         parseWMSCapas(
             capaUrl,
@@ -568,14 +596,20 @@ if (typeof proj4 != "undefined" && proj4) {
 
                 var ver = capas.version
 
+                var deferredLayers = []
+
                 $_.each(candidates, function (candidate, idx) {
+
+                    var deferredLayer = $.Deferred()
+                    deferredLayers.push(deferredLayer)
+
                     var mapLayer = new OpenLayers.Layer.WMSLayer(
                         candidate.name,
                         getMapUrl,
                         {layers: candidate.name,
-                         transparent: true,
-                         version: ver,
-                         EXCEPTIONS:"INIMAGE"},
+                            transparent: true,
+                            version: ver,
+                            EXCEPTIONS:"INIMAGE"},
                         {mlDescr: candidate,
                             title: candidate.title,
                             baseLayer: false,
@@ -583,29 +617,39 @@ if (typeof proj4 != "undefined" && proj4) {
                             visibility: idx == 0,
                             projection: map ? map.getProjectionObject() : Mercator, // force SRS to 3857 if using OSM baselayer
                             ratio: 1,/*
-                            protocol: new OpenLayers.Protocol.WMS({
-                                version: ver,
-                                url: url,
-                                featureType: candidate.name,
-                                srsName: map ? map.getProjectionObject() : Mercator,
-                                featureNS: candidate.featureNS,
-                                maxFeatures: MAX_FEATURES,
-                                geometryName: geomProps[0].name
-                            })
-                            */
+                         protocol: new OpenLayers.Protocol.WMS({
+                         version: ver,
+                         url: url,
+                         featureType: candidate.name,
+                         srsName: map ? map.getProjectionObject() : Mercator,
+                         featureNS: candidate.featureNS,
+                         maxFeatures: MAX_FEATURES,
+                         geometryName: geomProps[0].name
+                         })
+                         */
                         }
                     )
 
                     layerProcessor(mapLayer)
+
+                    deferredLayer.resolve(mapLayer)
+                })
+
+                $.when.apply($, deferredLayers).done(function() {
+                    deferredResult.resolve(deferredLayers)
                 })
 
             }
         )
 
+        return deferredResult;
+
     }
 
 
-    OL_HELPERS.withWMTSLayers = function (capaUrl, layerProcessor, layerName, projection) {
+    OL_HELPERS.withWMTSLayers = function (capaUrl, layerProcessor, layerName, projection, resolutions) {
+
+        var deferredResult = $.Deferred()
 
         OL_HELPERS.parseWMTSCapas(
             capaUrl,
@@ -618,7 +662,12 @@ if (typeof proj4 != "undefined" && proj4) {
 
                 var ver = capas.version
 
+                var deferredLayers = []
+
                 $_.each(candidates, function (candidate, idx) {
+                    var deferredLayer = $.Deferred()
+                    deferredLayers.push(deferredLayer)
+
                     var mapLayer = new OpenLayers.Format.WMTSCapabilities().createLayer(
                         capas,
                         {
@@ -627,17 +676,28 @@ if (typeof proj4 != "undefined" && proj4) {
                             layer: candidate.identifier,
                             //format: "image/png",  // TODO take format from layer descriptor
                             isBaseLayer: false,
-                            projection : projection
+                            visibility: idx == 0,
+                            projection : projection,
+                            resolutions: resolutions,
+                            requestEncoding : "KVP" //TODO is this needed ?
                         }
                     );
 
                     mapLayer.getDataExtent = OpenLayers.Layer.WMTSLayer.prototype.getDataExtent
 
                     layerProcessor(mapLayer)
+
+                    deferredLayer.resolve(mapLayer)
+                })
+
+                $.when.apply($, deferredLayers).done(function() {
+                    deferredResult.resolve(deferredLayers)
                 })
 
             }
         )
+
+        return deferredResult;
 
     }
 
@@ -863,16 +923,21 @@ if (typeof proj4 != "undefined" && proj4) {
         }  else if (mapConfig.type == 'wmts') {
 
             OL_HELPERS.withWMTSLayers(
-                '/basemap_service/wmts',
+                mapConfig['url'],
                 function(layer) {
                     layer.isBaseLayer = true
                     layer.options.attribution = mapConfig.attribution
                     layer.maxExtent = layer.mlDescr.bounds.transform(OL_HELPERS.EPSG4326, layer.projection)
 
+                    // force projection to be 4326 instead of CRS84, as tile matrix failed to be found properly otherwise
+                    if (layer.projection.projCode == "OGC:CRS84")
+                        layer.projection = OL_HELPERS.EPSG4326
+
                     callback (layer);
                 },
                 mapConfig['layer'],
-                mapConfig['srs']
+                mapConfig['srs'],
+                mapConfig['resolutions'] && eval(mapConfig['resolutions'])
             )
 
         } else if (mapConfig.type == 'wms') {
@@ -880,16 +945,21 @@ if (typeof proj4 != "undefined" && proj4) {
             if (!urls)
                 throw 'WMS URL must be set when using WMS Map type';
 
+            var useTiling = mapConfig['useTiling'] === undefined || mapConfig['useTiling']
+
             var baseMapLayer = new OpenLayers.Layer.WMSLayer(
                 mapConfig['layer'],
                 urls,
                 {layers: mapConfig['layer'],
-                    transparent: true},
+                    transparent: false,
+                    srs : "EPSG:4326"},
                 {
                     title: 'Base Layer',
                     isBaseLayer: true,
-                    singleTile: true,
+                    singleTile: !useTiling,
+                    //tileSize : useTiling ? new OpenLayers.Size(512,512) : undefined,
                     visibility: true,
+                    format: mapConfig['format'],
                     projection: mapConfig['srs'] ? new OpenLayers.Projection(mapConfig['srs']) : OL_HELPERS.Mercator, // force SRS to 3857 if using OSM baselayer
                     ratio: 1,
                     maxExtent: mapConfig['extent'] && eval(mapConfig['extent'])
