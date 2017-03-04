@@ -3,7 +3,10 @@
 if (typeof proj4 != "undefined" && proj4) {
     window.Proj4js = {
         Proj: function (code) {
-            return proj4(Proj4js.defs[code]);
+            var shortCode = code.replace(
+                /urn:ogc:def:crs:(\w+):(.*:)?(\w+)$/, "$1:$3"
+            )
+            return Proj4js.defs[shortCode] && proj4(Proj4js.defs[shortCode]);
         },
         defs: proj4.defs,
         transform: proj4
