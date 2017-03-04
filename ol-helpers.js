@@ -251,7 +251,7 @@ if (typeof proj4 != "undefined" && proj4) {
     }
 
     /**
-     * Parse a comma-separated set of KVP, typically for URL query or fragments
+     * Parse a URL into path, query KVP , hash KVP
      * @param url
      */
     OL_HELPERS.parseURL = function (url) {
@@ -750,7 +750,7 @@ if (typeof proj4 != "undefined" && proj4) {
                             visibility: idx == 0,
                             projection : projection,
                             resolutions: resolutions,
-                            requestEncoding : "KVP" //TODO is this needed ?
+                            //requestEncoding : "KVP" //TODO is this needed ?
                         }
                     );
 
