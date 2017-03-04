@@ -518,6 +518,47 @@ if (typeof proj4 != "undefined" && proj4) {
 
                             if (descr.featureTypes) {
 
+                                var srs;
+                                var isLatLon = false;
+
+                                if (candidate.srs) { // sometimes no default srs is found (misusage of DefaultSRS in 2.0 version, ...)
+
+                                    var allSrs = (candidate.altSrs || []).concat([candidate.srs])
+
+                                    // first look for 4326 projection
+                                    if (allSrs.indexOf("EPSG:4326") >= 0)
+                                        srs = new OpenLayers.Projection("EPSG:4326")
+                                    else {
+                                        for (var srsIdx in allSrs) {
+                                            if (allSrs[srsIdx].match(/urn:ogc:def:crs:EPSG:.*:4326$/)) {
+                                                srs = new OpenLayers.Projection(allSrs[srsIdx])
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if (!srs) {
+                                        // try current map projection
+                                        if (map && map.getProjectionObject() && allSrs.indexOf(map.getProjectionObject().toString()) >= 0)
+                                            srs = map.getProjectionObject()
+
+                                        // fallback on layer projection, if supported
+                                        else if (window.Proj4js && window.Proj4js.Proj(candidate.srs.toString()))
+                                            srs = new OpenLayers.Projection(candidate.srs)
+                                    }
+                                }
+                                if (!srs) {
+                                    // no projection found --> try EPSG:4326 anyway, should be supported
+                                    srs = new OpenLayers.Projection("EPSG:4326")
+                                }
+
+                                if (srs.toString().match(/urn:ogc:def:crs:EPSG:.*:4326$/) ||
+                                    srs.getCode().startsWith("urn:ogc:def:crs:") && srs.proj.oProj && srs.proj.oProj.units == "degrees") {
+                                    isLatLon = true // using long form SRS, assume it is lat/lon axis order
+                                }
+
+
+
                                 var geomProps = descr.featureTypes[0].properties.filter(function (prop) {
                                     return prop.type.startsWith("gml")
                                 })
@@ -528,21 +569,25 @@ if (typeof proj4 != "undefined" && proj4) {
                                     if (useGET) {
                                         var wfs_options = {
                                             url: url,
+                                            //headers : {"Content-Type": "application/xml"},
                                             params: {
                                                 request: "GetFeature",
                                                 service: "WFS",
                                                 version: ver,
                                                 typeName: candidate.prefixedName || candidate.name,
                                                 maxFeatures: MAX_FEATURES,
-                                                srsName: map ? map.getProjectionObject() : Mercator,
+                                                srsName: srs,
                                                 // TODO check capabilities for supported outputFormats
                                                 //      some impls expose a long-form expression of GML2/3
-                                                outputFormat: "gml2"
+                                                //outputFormat: "GML2"
                                             },
                                             format: new OpenLayers.Format.GML({
                                                 featureNS: candidate.featureNS,
                                                 geometryName: geomProps[0].name
                                             }),
+                                            formatOptions : {
+                                                xy: !isLatLon
+                                            },
                                             srsInBBOX : true
                                         }
 
@@ -550,7 +595,7 @@ if (typeof proj4 != "undefined" && proj4) {
                                             ftDescr: candidate,
                                             title: candidate.title,
                                             strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                                            projection: map ? map.getProjectionObject() : Mercator,
+                                            projection: srs,
                                             visibility: idx == 0,
                                             protocol: new OpenLayers.Protocol.HTTP(wfs_options)
                                         });
@@ -562,17 +607,22 @@ if (typeof proj4 != "undefined" && proj4) {
                                                 ftDescr: candidate,
                                                 title: candidate.title,
                                                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                                                projection: map ? map.getProjectionObject() : Mercator,
+                                                projection: srs,
                                                 visibility: idx == 0,
                                                 protocol: new OpenLayers.Protocol.WFS({
-                                                    headers: {"Content-Type": "application/xml; charset=UTF-8"}, // (failed) attempt at dealing with accentuated chars in some feature types
+                                                    //headers: {"Content-Type": "application/xml; charset=UTF-8"}, // (failed) attempt at dealing with accentuated chars in some feature types
                                                     version: ver,
                                                     url: url,
                                                     featureType: candidate.name,
-                                                    srsName: map ? map.getProjectionObject() : Mercator,
-                                                    featureNS: candidate.featureNS,
+                                                    srsName: srs,
+                                                    //featurePrefix: descr.targetPrefix,
+                                                    featureNS: descr.targetNamespace,
                                                     maxFeatures: MAX_FEATURES,
-                                                    geometryName: geomProps[0].name
+                                                    formatOptions : {
+                                                        xy: !isLatLon
+                                                    },
+                                                    geometryName: geomProps[0].name,
+                                                    //outputFormat: "GML2"  // enforce GML2, as GML3 uses lat/long axis order and discrepancies may exists between implementations (to be verified)
                                                 })
                                             })
                                     }
