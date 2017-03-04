@@ -26,12 +26,11 @@ if (typeof proj4 != "undefined" && proj4) {
 
     var MAX_FEATURES = 300
 
-    /*
+
      var default_style = OpenLayers.Util.extend({}, OpenLayers.Feature.Vector.style['default']);
      default_style.fillOpacity = 0.2;
      default_style.graphicOpacity = 1;
      default_style.strokeWidth = "2";
-     */
 
     var originalXHR = OpenLayers.Request.XMLHttpRequest
     OpenLayers.Request.XMLHttpRequest = function () {
@@ -559,7 +558,7 @@ if (typeof proj4 != "undefined" && proj4) {
                                     } else {
                                         ftLayer = new OpenLayers.Layer.WFSLayer(
                                             candidate.name, {
-                                                //style: default_style,
+                                                style: default_style,
                                                 ftDescr: candidate,
                                                 title: candidate.title,
                                                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
@@ -731,6 +730,7 @@ if (typeof proj4 != "undefined" && proj4) {
             {
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
+                style: default_style,
                 protocol: new OpenLayers.Protocol.HTTP({
                     url: url,
                     format: new OpenLayers.Format.GeoJSON()
@@ -750,6 +750,7 @@ if (typeof proj4 != "undefined" && proj4) {
             {
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
+                style: default_style,
                 protocol: new OpenLayers.Protocol.Script({
                     url: url, //ArcGIS Server REST GeoJSON output url
                     format: new OpenLayers.Format.EsriGeoJSON(),
@@ -800,7 +801,8 @@ if (typeof proj4 != "undefined" && proj4) {
             fillColor: "${getColor}", // using context.getColor(feature)
             fillOpacity: 0.6,
             strokeColor: "#404040",
-            strokeWidth: 0.5
+            strokeWidth: 0.5,
+            pointRadius: 5
         };
 
         var esrijson = new OpenLayers.Layer.Vector(
