@@ -473,10 +473,24 @@ if (typeof proj4 != "undefined" && proj4) {
         return gml
     }
 
+    /**
+     * Removes OGC conflicting URL parameters (service, request, version) and fragment
+     * @param url
+     */
+    OL_HELPERS.cleanOGCUrl = function (url) {
+        var urlParts = OL_HELPERS.parseURL(url)
+        delete urlParts.query['service']
+        delete urlParts.query['request']
+        delete urlParts.query['version']
+
+        return urlParts.path + '?' + OL_HELPERS.kvp2string(urlParts.query)
+
+    }
+
     OL_HELPERS.withFeatureTypesLayers = function (url, layerProcessor, ftName, map, useGET) {
 
         var deferredResult = $.Deferred()
-
+        url = OL_HELPERS.cleanOGCUrl(url)
         parseWFSCapas(
             url,
             function (capas) {
@@ -588,6 +602,9 @@ if (typeof proj4 != "undefined" && proj4) {
 
         var deferredResult = $.Deferred()
 
+        capaUrl = OL_HELPERS.cleanOGCUrl(capaUrl)
+        getMapUrl = OL_HELPERS.cleanOGCUrl(getMapUrl)
+
         parseWMSCapas(
             capaUrl,
             function (capas) {
@@ -653,6 +670,8 @@ if (typeof proj4 != "undefined" && proj4) {
     OL_HELPERS.withWMTSLayers = function (capaUrl, layerProcessor, layerName, projection, resolutions) {
 
         var deferredResult = $.Deferred()
+
+        capaUrl = OL_HELPERS.cleanOGCUrl(capaUrl)
 
         OL_HELPERS.parseWMTSCapas(
             capaUrl,
