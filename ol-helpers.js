@@ -3,11 +3,26 @@
 if (typeof proj4 != "undefined" && proj4) {
     window.Proj4js = {
         Proj: function (code) {
-            return proj4(Proj4js.defs[code]);
+            var shortCode = code.replace(
+                /urn:ogc:def:crs:(\w+):(.*:)?(\w+)$/, "$1:$3"
+            )
+            return Proj4js.defs[shortCode] && proj4(Proj4js.defs[shortCode]);
         },
         defs: proj4.defs,
         transform: proj4
     };
+}
+
+if (window.Proj4js) {
+    // add your projection definitions here
+    // definitions can be found at http://spatialreference.org/ref/epsg/{xxxx}/proj4js/
+
+    // warn : 31370 definition from spatialreference.org is wrong
+    window.Proj4js.defs["EPSG:31370"] = "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.868628,52.297783,-103.723893,0.336570,-0.456955,1.842183,-1.2747 +units=m +no_defs";
+
+    window.Proj4js.defs["EPSG:28992"] = "+proj=sterea +lat_0=52.15616055555555 +lon_0=5.38763888888889 +k=0.999908 +x_0=155000 +y_0=463000 +ellps=bessel +units=m +towgs84=565.2369,50.0087,465.658,-0.406857330322398,0.350732676542563,-1.8703473836068,4.0812 +no_defs <>";
+    window.Proj4js.defs["EPSG:3812"] = "+proj=lcc +lat_1=49.83333333333334 +lat_2=51.16666666666666 +lat_0=50.797815 +lon_0=4.359215833333333 +x_0=649328 +y_0=665262 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
+
 }
 
 (function() {
@@ -23,12 +38,11 @@ if (typeof proj4 != "undefined" && proj4) {
 
     var MAX_FEATURES = 300
 
-    /*
+
      var default_style = OpenLayers.Util.extend({}, OpenLayers.Feature.Vector.style['default']);
      default_style.fillOpacity = 0.2;
      default_style.graphicOpacity = 1;
      default_style.strokeWidth = "2";
-     */
 
     var originalXHR = OpenLayers.Request.XMLHttpRequest
     OpenLayers.Request.XMLHttpRequest = function () {
@@ -74,7 +88,7 @@ if (typeof proj4 != "undefined" && proj4) {
                 var bbox = this.ftDescr &&
                     (this.ftDescr.bounds || // WFS 1.1+
                         (this.ftDescr.latLongBoundingBox && new OpenLayers.Bounds(this.ftDescr.latLongBoundingBox))) // WFS 1.0
-                return (bbox && bbox.transform(EPSG4326, this.map.getProjectionObject()))
+                return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
                     || OpenLayers.Layer.Vector.prototype.getDataExtent.call(this, arguments)
             }
         }
@@ -85,7 +99,7 @@ if (typeof proj4 != "undefined" && proj4) {
             getDataExtent: function () {
                 return (this.mlDescr &&
                     this.mlDescr.llbbox &&
-                    new OpenLayers.Bounds(this.mlDescr.llbbox).transform(EPSG4326, this.map.getProjectionObject()))
+                    new OpenLayers.Bounds(this.mlDescr.llbbox).clone().transform(EPSG4326, this.map.getProjectionObject()))
                     || OpenLayers.Layer.WMS.prototype.getDataExtent.call(this, arguments)
             }
         }
@@ -96,7 +110,7 @@ if (typeof proj4 != "undefined" && proj4) {
             getDataExtent: function () {
                 return (this.mlDescr &&
                     this.mlDescr.bounds &&
-                    this.mlDescr.bounds.transform(EPSG4326, this.map.getProjectionObject()))
+                    this.mlDescr.bounds.clone().transform(EPSG4326, this.map.getProjectionObject()))
                     || OpenLayers.Layer.WMTS.prototype.getDataExtent.call(this, arguments)
             }
         }
@@ -116,6 +130,8 @@ if (typeof proj4 != "undefined" && proj4) {
             },
 
             redraw: function () {
+                var map = this.map
+
                 //if the state hasn't changed since last redraw, no need
                 // to do anything. Just return the existing div.
                 if (!this.checkRedraw()) {
@@ -193,6 +209,17 @@ if (typeof proj4 != "undefined" && proj4) {
                         : "baseline";
 
 
+                    var thisLayer = layer
+                    // snap to layer bbox action
+                    var gotoExtentButton =
+                        $("<span>[]</span>")
+                            .click(function() {
+                                var bbox = thisLayer.getDataExtent() || thisLayer.getExtent()
+                                //var transformedBbox = bbox.clone().transform(layer.projection, map.getProjection())
+                                map.zoomToExtent(bbox)
+                            })
+
+
                     var groupArray = (baseLayer) ? this.baseLayers
                         : this.dataLayers;
                     groupArray.push({
@@ -204,7 +231,11 @@ if (typeof proj4 != "undefined" && proj4) {
 
                     var groupDiv = $((baseLayer) ? this.baseLayersDiv
                         : this.dataLayersDiv);
-                    groupDiv.append($("<div></div>").append($(inputElem)).append($(labelSpan)));
+                    var subDiv = $("<div></div>").appendTo(groupDiv)
+                    subDiv
+                            .append($(inputElem))
+                            .append($(labelSpan))
+                    if (!baseLayer) subDiv.append(gotoExtentButton)
                 }
 
                 // if no overlays, dont display the overlay label
@@ -249,7 +280,7 @@ if (typeof proj4 != "undefined" && proj4) {
     }
 
     /**
-     * Parse a comma-separated set of KVP, typically for URL query or fragments
+     * Parse a URL into path, query KVP , hash KVP
      * @param url
      */
     OL_HELPERS.parseURL = function (url) {
@@ -470,10 +501,24 @@ if (typeof proj4 != "undefined" && proj4) {
         return gml
     }
 
+    /**
+     * Removes OGC conflicting URL parameters (service, request, version) and fragment
+     * @param url
+     */
+    OL_HELPERS.cleanOGCUrl = function (url) {
+        var urlParts = OL_HELPERS.parseURL(url)
+        delete urlParts.query['service']
+        delete urlParts.query['request']
+        delete urlParts.query['version']
+
+        return urlParts.path + '?' + OL_HELPERS.kvp2string(urlParts.query)
+
+    }
+
     OL_HELPERS.withFeatureTypesLayers = function (url, layerProcessor, ftName, map, useGET) {
 
         var deferredResult = $.Deferred()
-
+        url = OL_HELPERS.cleanOGCUrl(url)
         parseWFSCapas(
             url,
             function (capas) {
@@ -502,6 +547,47 @@ if (typeof proj4 != "undefined" && proj4) {
 
                             if (descr.featureTypes) {
 
+                                var srs;
+                                var isLatLon = false;
+
+                                if (candidate.srs) { // sometimes no default srs is found (misusage of DefaultSRS in 2.0 version, ...)
+
+                                    var allSrs = (candidate.altSrs || []).concat([candidate.srs])
+
+                                    // first look for 4326 projection
+                                    if (allSrs.indexOf("EPSG:4326") >= 0)
+                                        srs = new OpenLayers.Projection("EPSG:4326")
+                                    else {
+                                        for (var srsIdx in allSrs) {
+                                            if (allSrs[srsIdx].match(/urn:ogc:def:crs:EPSG:.*:4326$/)) {
+                                                srs = new OpenLayers.Projection(allSrs[srsIdx])
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if (!srs) {
+                                        // try current map projection
+                                        if (map && map.getProjectionObject() && allSrs.indexOf(map.getProjectionObject().toString()) >= 0)
+                                            srs = map.getProjectionObject()
+
+                                        // fallback on layer projection, if supported
+                                        else if (window.Proj4js && window.Proj4js.Proj(candidate.srs.toString()))
+                                            srs = new OpenLayers.Projection(candidate.srs)
+                                    }
+                                }
+                                if (!srs) {
+                                    // no projection found --> try EPSG:4326 anyway, should be supported
+                                    srs = new OpenLayers.Projection("EPSG:4326")
+                                }
+
+                                if (srs.toString().match(/urn:ogc:def:crs:EPSG:.*:4326$/) ||
+                                    srs.getCode().startsWith("urn:ogc:def:crs:") && srs.proj.oProj && srs.proj.oProj.units == "degrees") {
+                                    isLatLon = true // using long form SRS, assume it is lat/lon axis order
+                                }
+
+
+
                                 var geomProps = descr.featureTypes[0].properties.filter(function (prop) {
                                     return prop.type.startsWith("gml")
                                 })
@@ -512,21 +598,25 @@ if (typeof proj4 != "undefined" && proj4) {
                                     if (useGET) {
                                         var wfs_options = {
                                             url: url,
+                                            //headers : {"Content-Type": "application/xml"},
                                             params: {
                                                 request: "GetFeature",
                                                 service: "WFS",
                                                 version: ver,
                                                 typeName: candidate.prefixedName || candidate.name,
                                                 maxFeatures: MAX_FEATURES,
-                                                srsName: map ? map.getProjectionObject() : Mercator,
+                                                srsName: srs,
                                                 // TODO check capabilities for supported outputFormats
                                                 //      some impls expose a long-form expression of GML2/3
-                                                outputFormat: "gml2"
+                                                //outputFormat: "GML2"
                                             },
                                             format: new OpenLayers.Format.GML({
                                                 featureNS: candidate.featureNS,
                                                 geometryName: geomProps[0].name
                                             }),
+                                            formatOptions : {
+                                                xy: !isLatLon
+                                            },
                                             srsInBBOX : true
                                         }
 
@@ -534,7 +624,7 @@ if (typeof proj4 != "undefined" && proj4) {
                                             ftDescr: candidate,
                                             title: candidate.title,
                                             strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                                            projection: map ? map.getProjectionObject() : Mercator,
+                                            projection: srs,
                                             visibility: idx == 0,
                                             protocol: new OpenLayers.Protocol.HTTP(wfs_options)
                                         });
@@ -542,21 +632,26 @@ if (typeof proj4 != "undefined" && proj4) {
                                     } else {
                                         ftLayer = new OpenLayers.Layer.WFSLayer(
                                             candidate.name, {
-                                                //style: default_style,
+                                                style: default_style,
                                                 ftDescr: candidate,
                                                 title: candidate.title,
                                                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                                                projection: map ? map.getProjectionObject() : Mercator,
+                                                projection: srs,
                                                 visibility: idx == 0,
                                                 protocol: new OpenLayers.Protocol.WFS({
-                                                    headers: {"Content-Type": "application/xml; charset=UTF-8"}, // (failed) attempt at dealing with accentuated chars in some feature types
+                                                    //headers: {"Content-Type": "application/xml; charset=UTF-8"}, // (failed) attempt at dealing with accentuated chars in some feature types
                                                     version: ver,
                                                     url: url,
                                                     featureType: candidate.name,
-                                                    srsName: map ? map.getProjectionObject() : Mercator,
-                                                    featureNS: candidate.featureNS,
+                                                    srsName: srs,
+                                                    //featurePrefix: descr.targetPrefix,
+                                                    featureNS: descr.targetNamespace,
                                                     maxFeatures: MAX_FEATURES,
-                                                    geometryName: geomProps[0].name
+                                                    formatOptions : {
+                                                        xy: !isLatLon
+                                                    },
+                                                    geometryName: geomProps[0].name,
+                                                    //outputFormat: "GML2"  // enforce GML2, as GML3 uses lat/long axis order and discrepancies may exists between implementations (to be verified)
                                                 })
                                             })
                                     }
@@ -584,6 +679,9 @@ if (typeof proj4 != "undefined" && proj4) {
     OL_HELPERS.withWMSLayers = function (capaUrl, getMapUrl, layerProcessor, layerName, useTiling, map) {
 
         var deferredResult = $.Deferred()
+
+        capaUrl = OL_HELPERS.cleanOGCUrl(capaUrl)
+        getMapUrl = OL_HELPERS.cleanOGCUrl(getMapUrl)
 
         parseWMSCapas(
             capaUrl,
@@ -651,6 +749,8 @@ if (typeof proj4 != "undefined" && proj4) {
 
         var deferredResult = $.Deferred()
 
+        capaUrl = OL_HELPERS.cleanOGCUrl(capaUrl)
+
         OL_HELPERS.parseWMTSCapas(
             capaUrl,
             function (capas) {
@@ -679,7 +779,7 @@ if (typeof proj4 != "undefined" && proj4) {
                             visibility: idx == 0,
                             projection : projection,
                             resolutions: resolutions,
-                            requestEncoding : "KVP" //TODO is this needed ?
+                            //requestEncoding : "KVP" //TODO is this needed ?
                         }
                     );
 
@@ -709,6 +809,7 @@ if (typeof proj4 != "undefined" && proj4) {
             {
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
+                style: default_style,
                 protocol: new OpenLayers.Protocol.HTTP({
                     url: url,
                     format: new OpenLayers.Format.GeoJSON()
@@ -728,6 +829,7 @@ if (typeof proj4 != "undefined" && proj4) {
             {
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
+                style: default_style,
                 protocol: new OpenLayers.Protocol.Script({
                     url: url, //ArcGIS Server REST GeoJSON output url
                     format: new OpenLayers.Format.EsriGeoJSON(),
@@ -778,7 +880,8 @@ if (typeof proj4 != "undefined" && proj4) {
             fillColor: "${getColor}", // using context.getColor(feature)
             fillOpacity: 0.6,
             strokeColor: "#404040",
-            strokeWidth: 0.5
+            strokeWidth: 0.5,
+            pointRadius: 5
         };
 
         var esrijson = new OpenLayers.Layer.Vector(
@@ -927,7 +1030,7 @@ if (typeof proj4 != "undefined" && proj4) {
                 function(layer) {
                     layer.isBaseLayer = true
                     layer.options.attribution = mapConfig.attribution
-                    layer.maxExtent = layer.mlDescr.bounds.transform(OL_HELPERS.EPSG4326, layer.projection)
+                    layer.maxExtent = layer.mlDescr.bounds.clone().transform(OL_HELPERS.EPSG4326, layer.projection)
 
                     // force projection to be 4326 instead of CRS84, as tile matrix failed to be found properly otherwise
                     if (layer.projection.projCode == "OGC:CRS84")
