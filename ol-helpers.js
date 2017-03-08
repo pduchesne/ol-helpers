@@ -88,7 +88,7 @@ if (window.Proj4js) {
                 var bbox = this.ftDescr &&
                     (this.ftDescr.bounds || // WFS 1.1+
                         (this.ftDescr.latLongBoundingBox && new OpenLayers.Bounds(this.ftDescr.latLongBoundingBox))) // WFS 1.0
-                return (bbox && bbox.transform(EPSG4326, this.map.getProjectionObject()))
+                return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
                     || OpenLayers.Layer.Vector.prototype.getDataExtent.call(this, arguments)
             }
         }
@@ -99,7 +99,7 @@ if (window.Proj4js) {
             getDataExtent: function () {
                 return (this.mlDescr &&
                     this.mlDescr.llbbox &&
-                    new OpenLayers.Bounds(this.mlDescr.llbbox).transform(EPSG4326, this.map.getProjectionObject()))
+                    new OpenLayers.Bounds(this.mlDescr.llbbox).clone().transform(EPSG4326, this.map.getProjectionObject()))
                     || OpenLayers.Layer.WMS.prototype.getDataExtent.call(this, arguments)
             }
         }
@@ -110,7 +110,7 @@ if (window.Proj4js) {
             getDataExtent: function () {
                 return (this.mlDescr &&
                     this.mlDescr.bounds &&
-                    this.mlDescr.bounds.transform(EPSG4326, this.map.getProjectionObject()))
+                    this.mlDescr.bounds.clone().transform(EPSG4326, this.map.getProjectionObject()))
                     || OpenLayers.Layer.WMTS.prototype.getDataExtent.call(this, arguments)
             }
         }
@@ -130,6 +130,8 @@ if (window.Proj4js) {
             },
 
             redraw: function () {
+                var map = this.map
+
                 //if the state hasn't changed since last redraw, no need
                 // to do anything. Just return the existing div.
                 if (!this.checkRedraw()) {
@@ -207,6 +209,17 @@ if (window.Proj4js) {
                         : "baseline";
 
 
+                    var thisLayer = layer
+                    // snap to layer bbox action
+                    var gotoExtentButton =
+                        $("<span>[]</span>")
+                            .click(function() {
+                                var bbox = thisLayer.getDataExtent() || thisLayer.getExtent()
+                                //var transformedBbox = bbox.clone().transform(layer.projection, map.getProjection())
+                                map.zoomToExtent(bbox)
+                            })
+
+
                     var groupArray = (baseLayer) ? this.baseLayers
                         : this.dataLayers;
                     groupArray.push({
@@ -218,7 +231,11 @@ if (window.Proj4js) {
 
                     var groupDiv = $((baseLayer) ? this.baseLayersDiv
                         : this.dataLayersDiv);
-                    groupDiv.append($("<div></div>").append($(inputElem)).append($(labelSpan)));
+                    var subDiv = $("<div></div>").appendTo(groupDiv)
+                    subDiv
+                            .append($(inputElem))
+                            .append($(labelSpan))
+                    if (!baseLayer) subDiv.append(gotoExtentButton)
                 }
 
                 // if no overlays, dont display the overlay label
@@ -1013,7 +1030,7 @@ if (window.Proj4js) {
                 function(layer) {
                     layer.isBaseLayer = true
                     layer.options.attribution = mapConfig.attribution
-                    layer.maxExtent = layer.mlDescr.bounds.transform(OL_HELPERS.EPSG4326, layer.projection)
+                    layer.maxExtent = layer.mlDescr.bounds.clone().transform(OL_HELPERS.EPSG4326, layer.projection)
 
                     // force projection to be 4326 instead of CRS84, as tile matrix failed to be found properly otherwise
                     if (layer.projection.projCode == "OGC:CRS84")
