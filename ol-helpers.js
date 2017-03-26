@@ -38,11 +38,24 @@ if (window.Proj4js) {
 
     var MAX_FEATURES = 300
 
-
-     var default_style = OpenLayers.Util.extend({}, OpenLayers.Feature.Vector.style['default']);
-     default_style.fillOpacity = 0.2;
-     default_style.graphicOpacity = 1;
-     default_style.strokeWidth = "2";
+    var context = {
+        getColor: function(feature) {
+            return (feature.data.RGB && "rgb("+feature.data.RGB+")") || "#5784BF"
+        }
+    };
+    var template = {
+        fillColor: "${getColor}", // using context.getColor(feature)
+        fillOpacity: 0.1,
+        //graphicOpacity: 1,
+        strokeColor: "#2a6496",
+        strokeWidth: 1,
+        pointRadius: 5
+    };
+    var defaultStyleMap = OL_HELPERS.defaultStyleMap = new OpenLayers.StyleMap({
+        'default': new OpenLayers.Style(template, {context: context}),
+        'select': new OpenLayers.Style(_.extend({}, template, {fillOpacity: 0.4, strokeWidth: 2}), {context: context}),
+        'temporary': new OpenLayers.Style(template, {context: context})
+    })
 
     var originalXHR = OpenLayers.Request.XMLHttpRequest
     OpenLayers.Request.XMLHttpRequest = function () {
@@ -81,6 +94,18 @@ if (window.Proj4js) {
             }
         }
     })
+
+    OpenLayers.Layer.ArcgisVectorLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
+        {
+            getDataExtent: function () {
+                var bbox = this.layerDescr &&
+                    (this.layerDescr.bounds ||
+                        (this.layerDescr.latLongBoundingBox && new OpenLayers.Bounds(this.layerDescr.latLongBoundingBox)))
+                return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
+                    || OpenLayers.Layer.Vector.prototype.getDataExtent.call(this, arguments)
+            }
+        }
+    )
 
     OpenLayers.Layer.WFSLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
         {
@@ -212,7 +237,7 @@ if (window.Proj4js) {
                     var thisLayer = layer
                     // snap to layer bbox action
                     var gotoExtentButton =
-                        $("<span>[]</span>")
+                        $("<span class='zoomToExtentIcon'>[]</span>")
                             .click(function() {
                                 var bbox = thisLayer.getDataExtent() || thisLayer.getExtent()
                                 //var transformedBbox = bbox.clone().transform(layer.projection, map.getProjection())
@@ -424,6 +449,7 @@ if (window.Proj4js) {
     OL_HELPERS.createKMLLayer = function (url) {
 
         var kml = new OpenLayers.Layer.Vector("KML", {
+            styleMap: defaultStyleMap,
             projection: EPSG4326,
             strategies: [new OpenLayers.Strategy.Fixed()],
             protocol: new OpenLayers.Protocol.HTTP({
@@ -442,6 +468,7 @@ if (window.Proj4js) {
     OL_HELPERS.createGFTLayer = function (tableId, GoogleAPIKey) {
         return new OpenLayers.Layer.Vector(
             "GFT", {
+                styleMap: defaultStyleMap,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
                 protocol: new OpenLayers.Protocol.Script({
@@ -489,6 +516,7 @@ if (window.Proj4js) {
     OL_HELPERS.createGMLLayer = function (url) {
 
         var gml = new OpenLayers.Layer.Vector("GML", {
+            styleMap: defaultStyleMap,
             strategies: [new OpenLayers.Strategy.Fixed()],
             protocol: new OpenLayers.Protocol.HTTP({
                 url: url,
@@ -621,6 +649,7 @@ if (window.Proj4js) {
                                         }
 
                                         ftLayer = new OpenLayers.Layer.Vector('WFS', {
+                                            styleMap: defaultStyleMap,
                                             ftDescr: candidate,
                                             title: candidate.title,
                                             strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
@@ -632,7 +661,7 @@ if (window.Proj4js) {
                                     } else {
                                         ftLayer = new OpenLayers.Layer.WFSLayer(
                                             candidate.name, {
-                                                style: default_style,
+                                                styleMap: defaultStyleMap,
                                                 ftDescr: candidate,
                                                 title: candidate.title,
                                                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
@@ -809,7 +838,7 @@ if (window.Proj4js) {
             {
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
-                style: default_style,
+                styleMap: defaultStyleMap,
                 protocol: new OpenLayers.Protocol.HTTP({
                     url: url,
                     format: new OpenLayers.Format.GeoJSON()
@@ -827,6 +856,7 @@ if (window.Proj4js) {
         var esrijson = new OpenLayers.Layer.Vector(
             "Esri GeoJSON",
             {
+                styleMap: defaultStyleMap,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
                 style: default_style,
@@ -871,28 +901,15 @@ if (window.Proj4js) {
 
     OL_HELPERS.createArcgisFeatureLayer = function (url, descriptor, visible) {
 
-        var context = {
-            getColor: function(feature) {
-                return (feature.data.RGB && "rgb("+feature.data.RGB+")") || "#ee9900"
-            }
-        };
-        var template = {
-            fillColor: "${getColor}", // using context.getColor(feature)
-            fillOpacity: 0.6,
-            strokeColor: "#404040",
-            strokeWidth: 0.5,
-            pointRadius: 5
-        };
-
-        var esrijson = new OpenLayers.Layer.Vector(
+        //TODO fetch layer descriptor to extract extent
+        var esrijson = new OpenLayers.Layer.ArcgisVectorLayer(
             descriptor.name,
             {
+                layerDescr: descriptor,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
                 visibility: visible,
-                styleMap: new OpenLayers.StyleMap({
-                    'default': new OpenLayers.Style(template, {context: context})
-                }),
+                styleMap: defaultStyleMap,
                 protocol: new OpenLayers.Protocol.Script({
                     url: url +   //build ArcGIS Server query string
                         "/query?dummy=1&" +
