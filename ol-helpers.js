@@ -287,10 +287,10 @@ if (window.Proj4js) {
     var parseKVP = OL_HELPERS.parseKVP = function (kvpString) {
         var kvps = (kvpString && kvpString.split("&")) || []
         var kvpMap = {}
-        for (var idx in  kvps) {
-            var kv = kvps[idx].split('=')
+        kvps.forEach(function(val, idx) {
+            var kv = val.split('=')
             kvpMap[kv[0].toLowerCase()] = kv[1]
-        }
+        })
 
         return kvpMap
     }
@@ -586,7 +586,7 @@ if (window.Proj4js) {
                                     if (allSrs.indexOf("EPSG:4326") >= 0)
                                         srs = new OpenLayers.Projection("EPSG:4326")
                                     else {
-                                        for (var srsIdx in allSrs) {
+                                        for (var srsIdx = 0, length = allSrs.length; srsIdx < length; srsIdx++) {
                                             if (allSrs[srsIdx].match(/urn:ogc:def:crs:EPSG:.*:4326$/)) {
                                                 srs = new OpenLayers.Projection(allSrs[srsIdx])
                                                 break;
