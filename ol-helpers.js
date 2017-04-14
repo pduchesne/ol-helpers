@@ -102,7 +102,7 @@ if (window.Proj4js) {
                     (this.layerDescr.bounds ||
                         (this.layerDescr.latLongBoundingBox && new OpenLayers.Bounds(this.layerDescr.latLongBoundingBox)))
                 return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.Vector.prototype.getDataExtent.call(this, arguments)
+                    || OpenLayers.Layer.Vector.prototype.getDataExtent.apply(this, arguments)
             }
         }
     )
@@ -114,7 +114,7 @@ if (window.Proj4js) {
                     (this.ftDescr.bounds || // WFS 1.1+
                         (this.ftDescr.latLongBoundingBox && new OpenLayers.Bounds(this.ftDescr.latLongBoundingBox))) // WFS 1.0
                 return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.Vector.prototype.getDataExtent.call(this, arguments)
+                    || OpenLayers.Layer.Vector.prototype.getDataExtent.apply(this, arguments)
             }
         }
     )
@@ -125,7 +125,7 @@ if (window.Proj4js) {
                 return (this.mlDescr &&
                     this.mlDescr.llbbox &&
                     new OpenLayers.Bounds(this.mlDescr.llbbox).clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.WMS.prototype.getDataExtent.call(this, arguments)
+                    || OpenLayers.Layer.WMS.prototype.getDataExtent.apply(this, arguments)
             }
         }
     )
@@ -136,8 +136,99 @@ if (window.Proj4js) {
                 return (this.mlDescr &&
                     this.mlDescr.bounds &&
                     this.mlDescr.bounds.clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.WMTS.prototype.getDataExtent.call(this, arguments)
+                    || OpenLayers.Layer.WMTS.prototype.getDataExtent.apply(this, arguments)
             }
+        }
+    )
+
+    OpenLayers.LoggingMap = OpenLayers.Class(OpenLayers.Map,
+        {
+            initialize: function(options) {
+                OpenLayers.Map.prototype.initialize.apply(this, arguments)
+                this.loadingObjects = []
+
+                this.loadingDiv = options.loadingDiv
+                if (!this.loadingDiv) {
+                    this.loadingDiv = OpenLayers.Util.createDiv()
+                    this.loadingDiv.textContent = "Loading..."
+                    this.loadingDiv.style.zIndex = 3000
+                }
+
+                this.viewPortDiv.appendChild(this.loadingDiv);
+            },
+
+            updateLoadingStatus: function() {
+                if (this.loadingObjects.length == 0) {
+                    this.loadingDiv.style.display = 'none'
+                } else {
+                    this.loadingDiv.style.display = ''
+                }
+            },
+
+            addLayer: function(layer) {
+                OpenLayers.Map.prototype.addLayer.apply(this, arguments)
+
+                var _this = this
+
+                layer.events.register("loadstart", layer, function() {
+                    if (_this.loadingObjects.indexOf(this) >= 0) {
+                        console.log("Layer starts twice : "+this.id)
+                    } else {
+                        _this.loadingObjects.push(this)
+                    }
+                    _this.updateLoadingStatus()
+                });
+
+                layer.events.register("loadend", layer, function() {
+                    var idx = _this.loadingObjects.indexOf(this)
+                    if (idx >= 0) {
+                        _this.loadingObjects.splice(idx, 1)
+                    }
+
+                    _this.updateLoadingStatus()
+                });
+
+                layer.events.register("loaderror", layer, function(evt) {
+                    var idx = _this.loadingObjects.indexOf(this)
+                    if (idx >= 0) {
+                        _this.loadingObjects.splice(idx, 1)
+                    }
+
+                    _this.updateLoadingStatus()
+
+                    console.warn("Layer fails top load :"+evt)
+                });
+
+                layer.events.register("tileloadstart", layer, function(evt) {
+                    if (_this.loadingObjects.indexOf(evt.tile) >= 0) {
+                        console.log("Tile starts twice : "+evt.tile.id)
+                    } else {
+                        _this.loadingObjects.push(evt.tile)
+                    }
+                    _this.updateLoadingStatus()
+                });
+
+                layer.events.register("tileloaded", layer, function(evt) {
+                    var idx = _this.loadingObjects.indexOf(evt.tile)
+                    if (idx >= 0) {
+                        _this.loadingObjects.splice(idx, 1)
+                    }
+
+                    _this.updateLoadingStatus()
+                });
+
+                layer.events.register("tileerror", layer, function(evt) {
+                    var idx = _this.loadingObjects.indexOf(evt.tile)
+                    if (idx >= 0) {
+                        _this.loadingObjects.splice(idx, 1)
+                    }
+
+                    _this.updateLoadingStatus()
+
+                    console.warn("Tile fails top load :"+evt)
+                });
+            }
+
         }
     )
 
