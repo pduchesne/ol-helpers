@@ -642,7 +642,10 @@ if (window.Proj4js) {
                                                         maxFeatures: MAX_FEATURES,
                                                         typename: $candidate.find('Name').text(), /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
                                                         srsname: srs.getCode(),
-                                                        bbox: extent.join(',') // + ',EPSG:3857' /* TODO_OL4 include ? */
+                                                        /* explicit SRS must be provided here, as some impl (geoserver)
+                                                           take lat/lon axis order by default.
+                                                           EPSG:4326 enforces lon/lat order */
+                                                        bbox: extent.join(',') + ','+srs.getCode()
                                                     }
 
                                                     fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
