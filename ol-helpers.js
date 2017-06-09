@@ -33,17 +33,28 @@ if (window.Proj4js) {
 
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
 
-    var EPSG4326 = OL_HELPERS.EPSG4326 = new OpenLayers.Projection("EPSG:4326")
-    var Mercator = OL_HELPERS.Mercator = new OpenLayers.Projection("EPSG:3857")
+    var EPSG4326 = OL_HELPERS.EPSG4326 = ol.proj.get("EPSG:4326")
+    var Mercator = OL_HELPERS.Mercator = ol.proj.get("EPSG:3857")
 
     var MAX_FEATURES = 300
 
-
-     var default_style = OpenLayers.Util.extend({}, OpenLayers.Feature.Vector.style['default']);
+     /* TODO_OL4
+     var default_style = _.extend({}, OpenLayers.Feature.Vector.style['default']);
      default_style.fillOpacity = 0.2;
      default_style.graphicOpacity = 1;
      default_style.strokeWidth = "2";
+     */
+    var stroke = new ol.style.Stroke({color: 'black', width: 2});
+    var fill = new ol.style.Fill({color: 'red'});
+    var default_style = new ol.style.RegularShape({
+        radius: 10,
+        points: 5,
+        angle: Math.PI,
+        fill: fill,
+        stroke: stroke
+    })
 
+    /* TODO_OL4
     var originalXHR = OpenLayers.Request.XMLHttpRequest
     OpenLayers.Request.XMLHttpRequest = function () {
         var newXHR = new originalXHR()
@@ -65,8 +76,9 @@ if (window.Proj4js) {
     $_.each(Object.keys(originalXHR), function (key) {
         OpenLayers.Request.XMLHttpRequest[key] = originalXHR[key]
     })
+    */
 
-
+    /* TODO_OL4 : ol.strategy.bbox is now a plain function
     OpenLayers.Strategy.BBOXWithMax = OpenLayers.Class(OpenLayers.Strategy.BBOX, {
         update: function (options) {
             var mapBounds = this.getMapBounds() || new OpenLayers.Bounds(-180, -90, 180, 90);
@@ -80,8 +92,9 @@ if (window.Proj4js) {
                 this.triggerRead(options);
             }
         }
-    })
+        */
 
+    /* TODO_OL4 : redefine a strategy to extract extent from parsed capabilities
     OpenLayers.Layer.WFSLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
         {
             getDataExtent: function () {
@@ -115,15 +128,12 @@ if (window.Proj4js) {
             }
         }
     )
+    */
 
+    /* TODO_OL4 : custom layer switcher
     OpenLayers.Control.HilatsLayerSwitcher = OpenLayers.Class(OpenLayers.Control.LayerSwitcher,
         {
-            /**
-             * Constructor: OpenLayers.Control.LayerSwitcher
-             *
-             * Parameters:
-             * options - {Object}
-             */
+
             initialize: function(options) {
                 OpenLayers.Control.LayerSwitcher.prototype.initialize.apply(this, arguments)
                 this.baselayers = options.baselayers
@@ -255,6 +265,8 @@ if (window.Proj4js) {
         }
     );
 
+    */
+
     /**
      * Parse a comma-separated set of KVP, typically for URL query or fragments
      * @param url
@@ -322,78 +334,76 @@ if (window.Proj4js) {
     }
 
     var parseWFSCapas = function (url, callback, failCallback) {
-        var wfsFormat = new OpenLayers.Format.WFSCapabilities();
 
-        OpenLayers.Request.GET({
-            url: url,
-            params: {
-                SERVICE: "WFS",
-                REQUEST: "GetCapabilities"
-            },
-            success: function (request) {
-                var doc = request.responseXML;
-                if (!doc || !doc.documentElement) {
-                    doc = request.responseText;
-                }
-                var capabilities = wfsFormat.read(doc)
-                callback(capabilities)
-            },
-            failure: failCallback || function () {
-                alert("Trouble getting capabilities doc");
-                OpenLayers.Console.error.apply(OpenLayers.Console, arguments);
+
+        var params = {
+            SERVICE: "WFS",
+            REQUEST: "GetCapabilities"
+        }
+        fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
+            {method:'GET'}
+        ).then(
+            function(response) {
+                return response.text();
             }
-        });
+        ).then(
+            function(text) {
+                var capabilities = $.parseXML(text);
+                callback(capabilities)
+            }
+        ).catch(function(ex) {
+                console.warn("Trouble getting capabilities doc");
+                console.warn(ex);
+            })
     }
 
 
     var parseWFSFeatureTypeDescr = function (url, ftName, ver, callback, failCallback) {
-        var format = new OpenLayers.Format.WFSDescribeFeatureType()
-
-        OpenLayers.Request.GET({
-            url: url,
-            params: {
-                SERVICE: "WFS",
-                REQUEST: "DescribeFeatureType",
-                TYPENAME: ftName,
-                VERSION: ver
-            },
-            success: function (request) {
-                var doc = request.responseXML;
-                if (!doc || !doc.documentElement) {
-                    doc = request.responseText;
-                }
-                var descr = format.read(doc)
-                callback(descr)
-            },
-            failure: failCallback || function () {
-                alert("Trouble getting ft decription doc");
-                OpenLayers.Console.error.apply(OpenLayers.Console, arguments);
+        var params = {
+            SERVICE: "WFS",
+            REQUEST: "DescribeFeatureType",
+            TYPENAME: ftName,
+            VERSION: ver
+        }
+        fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
+            {method:'GET'}
+        ).then(
+            function(response) {
+                return response.text();
             }
-        });
+        ).then(
+            function(text) {
+                var capabilities = $.parseXML(text);
+                callback(capabilities)
+            }
+        ).catch(failCallback || function(ex) {
+                console.warn("Trouble getting FT description doc");
+                console.warn(ex);
+            })
     }
 
     var parseWMSCapas = function (url, callback, failCallback) {
-        var wmsFormat = new OpenLayers.Format.WMSCapabilities();
-
-        OpenLayers.Request.GET({
-            url: url,
-            params: {
-                SERVICE: "WMS",
-                REQUEST: "GetCapabilities"
-            },
-            success: function (request) {
-                var doc = request.responseXML;
-                if (!doc || !doc.documentElement) {
-                    doc = request.responseText;
-                }
-                var capabilities = wmsFormat.read(doc)
-                callback(capabilities)
-            },
-            failure: failCallback || function () {
-                alert("Trouble getting capabilities doc");
-                OpenLayers.Console.error.apply(OpenLayers.Console, arguments);
+        var parser = new ol.format.WMSCapabilities();
+        var params = {
+            SERVICE: "WMS",
+            REQUEST: "GetCapabilities"
+        }
+        fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
+              {method:'GET'}
+        ).then(
+            function(response) {
+                return response.text();
             }
-        });
+        ).then(
+            function(text) {
+                var capabilities = parser.read(text);
+                callback(capabilities)
+            }
+        ).catch(function(ex) {
+                console.warn("Trouble getting capabilities doc");
+                console.warn(ex);
+            })
+
     }
 
     OL_HELPERS.parseWMTSCapas = function (url, callback, failCallback) {
@@ -522,45 +532,55 @@ if (window.Proj4js) {
         parseWFSCapas(
             url,
             function (capas) {
+                var $capas = $(capas)
 
-                var ver = capas.version
+                /* TODO_OL4 should we have a dedicated WFS parser that handles multiple versions ? */
+                var ver = $capas.find('WFS_Capabilities').attr('version')
                 if (ver == "2.0.0") ver = "1.1.0"  // 2.0.0 causes failures in some cases (e.g. Geoserver TOPP States WFS)
 
-                var candidates = capas.featureTypeList.featureTypes
+                var candidates = $capas.find('FeatureTypeList').find('FeatureType')
                 if (ftName) candidates = candidates.filter(function (ft) {
-                    return ft.name == ftName
+                    return ft.find('Name').text() == ftName
                 })
 
                 var deferredLayers = []
 
-                $_.each(candidates, function (candidate, idx) {
-
-                    var deferredLayer = $.Deferred()
-                    deferredLayers.push(deferredLayer)
+                candidates.each(function (idx, candidate) {
+                    var $candidate = $(candidate);
+                    var deferredLayer = $.Deferred();
+                    deferredLayers.push(deferredLayer);
 
                     parseWFSFeatureTypeDescr(
                         url,
-                            candidate.prefixedName || candidate.name,
+                        $candidate.find('Name').text(), /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
                         ver,
                         function (descr) {
-                            var ftLayer
+                            var $descr = $(descr);
+                            var ftLayer;
 
-                            if (descr.featureTypes) {
+                            // WARN extremely fragile and hackish way to parse FT schema
+                            var featureTypeProperties = $descr.find('complexType').find('sequence').find('element');
+                            if (featureTypeProperties.length) {
 
                                 var srs;
                                 var isLatLon = false;
 
-                                if (candidate.srs) { // sometimes no default srs is found (misusage of DefaultSRS in 2.0 version, ...)
+                                var defaultSrs = $candidate.find('>DefaultSRS').text()
 
-                                    var allSrs = (candidate.altSrs || []).concat([candidate.srs])
+                                var altSrs = $candidate.find('>SRS').map(function() {
+                                    return $(this).text();
+                                }).get()
+                                if (defaultSrs) { // sometimes no default srs is found (misusage of DefaultSRS in 2.0 version, ...)
+
+                                    var allSrs = (altSrs || []).concat([defaultSrs])
 
                                     // first look for 4326 projection
                                     if (allSrs.indexOf("EPSG:4326") >= 0)
-                                        srs = new OpenLayers.Projection("EPSG:4326")
+                                        srs = ol.proj.get("EPSG:4326")
                                     else {
                                         for (var srsIdx in allSrs) {
                                             if (allSrs[srsIdx].match(/urn:ogc:def:crs:EPSG:.*:4326$/)) {
-                                                srs = new OpenLayers.Projection(allSrs[srsIdx])
+                                                srs = ol.proj.get(allSrs[srsIdx])
                                                 break;
                                             }
                                         }
@@ -568,17 +588,17 @@ if (window.Proj4js) {
 
                                     if (!srs) {
                                         // try current map projection
-                                        if (map && map.getProjectionObject() && allSrs.indexOf(map.getProjectionObject().toString()) >= 0)
-                                            srs = map.getProjectionObject()
+                                        if (map && map.getView().getProjection() && allSrs.indexOf(map.getView().getProjection().getCode()) >= 0)
+                                            srs = map.getView().getProjection()
 
                                         // fallback on layer projection, if supported
-                                        else if (window.Proj4js && window.Proj4js.Proj(candidate.srs.toString()))
-                                            srs = new OpenLayers.Projection(candidate.srs)
+                                        else if (window.Proj4js && window.Proj4js.Proj(defaultSrs))
+                                            srs = ol.proj.get(defaultSrs)
                                     }
                                 }
                                 if (!srs) {
                                     // no projection found --> try EPSG:4326 anyway, should be supported
-                                    srs = new OpenLayers.Projection("EPSG:4326")
+                                    srs = ol.proj.get("EPSG:4326")
                                 }
 
                                 if (srs.toString().match(/urn:ogc:def:crs:EPSG:.*:4326$/) ||
@@ -588,14 +608,84 @@ if (window.Proj4js) {
 
 
 
-                                var geomProps = descr.featureTypes[0].properties.filter(function (prop) {
-                                    return prop.type.startsWith("gml")
+                                var geomProps = featureTypeProperties.filter(function (idx, prop) {
+                                    var type = $(prop).attr('type');
+                                    return type && type.startsWith("gml");
                                 })
 
                                 // ignore feature types with no gml prop. Correct ?
                                 if (geomProps && geomProps.length > 0) {
 
                                     if (useGET) {
+
+                                        var format = new ol.format.WFS({
+                                            //version: ver,
+                                            url: url,
+                                            // If specifying featureType, it is mandatory to also specify featureNS
+                                            // if not, OL will introspect and find all NS and feature types
+                                            //featureType: $candidate.find('Name').text(), /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                                            //featureNS: candidate.featureNS,
+
+                                            //gmlFormat: new ol.format.GML2()
+
+                                            /* TODO_OL4 can we ignore the geometryName and leave it up to OL ? */
+                                            //geometryName: $(geomProps[0]).attr('name')
+                                        })
+                                        ftLayer = new ol.layer.Vector({
+                                            source: new ol.source.Vector({
+                                                loader: function(extent) {
+
+                                                    var params = {
+                                                        service: 'WFS',
+                                                        version: ver,
+                                                        request: 'GetFeature',
+                                                        maxFeatures: MAX_FEATURES,
+                                                        typename: $candidate.find('Name').text(), /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                                                        srsname: srs.getCode(),
+                                                        bbox: extent.join(',') // + ',EPSG:3857' /* TODO_OL4 include ? */
+                                                    }
+
+                                                    fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
+                                                        {method:'GET'}
+                                                    ).then(
+                                                        function(response) {
+                                                            return response.text();
+                                                        }
+                                                    ).then(
+                                                        function(text) {
+                                                            var features = format.readFeatures(text)
+                                                            if (!isLatLon) {
+                                                                // OL3+ only supports xy. --> reverse axis order if not native latLon
+                                                                for (var i = 0; i < features.length; i++) {
+                                                                    features[i].getGeometry().applyTransform(function (coords, coords2, stride) {
+                                                                        for (var j = 0; j < coords.length; j += stride) {
+                                                                            var y = coords[j];
+                                                                            var x = coords[j + 1];
+                                                                            coords[j] = x;
+                                                                            coords[j + 1] = y;
+                                                                        }
+                                                                    });
+                                                                }
+                                                            }
+                                                            ftLayer
+                                                                .getSource()
+                                                                .addFeatures(features);
+                                                        }
+                                                    ).catch(function(ex) {
+                                                            console.warn("GetFeatures failed");
+                                                            console.warn(ex);
+                                                        })
+                                                },
+                                                strategy: ol.loadingstrategy.bbox,
+                                                projection: srs,
+                                            }),
+                                            visible: idx == 0
+                                        });
+
+
+
+                                         /* TODO_OL4 : still to integrate : BBOXWithMax
+
                                         var wfs_options = {
                                             url: url,
                                             //headers : {"Content-Type": "application/xml"},
@@ -612,7 +702,7 @@ if (window.Proj4js) {
                                             },
                                             format: new OpenLayers.Format.GML({
                                                 featureNS: candidate.featureNS,
-                                                geometryName: geomProps[0].name
+                                                geometryName: $(geomProps[0]).attr('name')
                                             }),
                                             formatOptions : {
                                                 xy: !isLatLon
@@ -629,7 +719,11 @@ if (window.Proj4js) {
                                             protocol: new OpenLayers.Protocol.HTTP(wfs_options)
                                         });
                                         ftLayer.getDataExtent = OpenLayers.Layer.WFSLayer.prototype.getDataExtent
+
+                                        */
                                     } else {
+
+                                        /* TODO_OL4 implement POST
                                         ftLayer = new OpenLayers.Layer.WFSLayer(
                                             candidate.name, {
                                                 style: default_style,
@@ -650,10 +744,13 @@ if (window.Proj4js) {
                                                     formatOptions : {
                                                         xy: !isLatLon
                                                     },
-                                                    geometryName: geomProps[0].name,
+                                                    geometryName: $(geomProps[0]).attr('name'),
                                                     //outputFormat: "GML2"  // enforce GML2, as GML3 uses lat/long axis order and discrepancies may exists between implementations (to be verified)
                                                 })
                                             })
+                                            */
+
+                                        throw "Not Implemented";
                                     }
 
                                     layerProcessor(ftLayer)
@@ -687,9 +784,9 @@ if (window.Proj4js) {
             capaUrl,
             function (capas) {
 
-                var candidates = capas.capability.layers
+                var candidates = capas.Capability.Layer.Layer
                 if (layerName) candidates = candidates.filter(function (layer) {
-                    return layer.name == layerName
+                    return layer.Name == layerName
                 })
 
                 var ver = capas.version
@@ -701,32 +798,37 @@ if (window.Proj4js) {
                     var deferredLayer = $.Deferred()
                     deferredLayers.push(deferredLayer)
 
-                    var mapLayer = new OpenLayers.Layer.WMSLayer(
-                        candidate.name,
-                        getMapUrl,
-                        {layers: candidate.name,
-                            transparent: true,
-                            version: ver,
-                            EXCEPTIONS:"INIMAGE"},
-                        {mlDescr: candidate,
-                            title: candidate.title,
-                            baseLayer: false,
-                            singleTile: !useTiling,
-                            visibility: idx == 0,
-                            projection: map ? map.getProjectionObject() : Mercator, // force SRS to 3857 if using OSM baselayer
-                            ratio: 1,/*
-                         protocol: new OpenLayers.Protocol.WMS({
-                         version: ver,
-                         url: url,
-                         featureType: candidate.name,
-                         srsName: map ? map.getProjectionObject() : Mercator,
-                         featureNS: candidate.featureNS,
-                         maxFeatures: MAX_FEATURES,
-                         geometryName: geomProps[0].name
-                         })
-                         */
-                        }
-                    )
+                    var mapLayer;
+                    if (useTiling) {
+                        mapLayer = new ol.layer.Tile({
+                            title: candidate.Name,
+                            visible: idx == 0,
+                            //extent: ,
+                            source: new ol.source.TileWMS({
+                                url: getMapUrl,
+                                params: {LAYERS: candidate.Name,
+                                    TRANSPARENT: true,
+                                    VERSION: ver,
+                                    EXCEPTIONS: "INIMAGE"},
+                                //projection: map ? map.getProjectionObject() : Mercator  /* TODO_OL4 get projection from baseLayer ? */
+                            })
+                        })
+                    } else {
+                        mapLayer = new ol.layer.Image({
+                            title: candidate.Name,
+                            visible: idx == 0,
+                            //extent: ,
+                            source: new ol.source.ImageWMS({
+                                url: getMapUrl,
+                                params: {LAYERS: candidate.Name,
+                                    TRANSPARENT: true,
+                                    VERSION: ver,
+                                    EXCEPTIONS: "INIMAGE"},
+                                //projection: map ? map.getProjectionObject() : Mercator, /* TODO_OL4 get projection from baseLayer ? */
+                                ratio : 1
+                            })
+                        })
+                    }
 
                     layerProcessor(mapLayer)
 
@@ -988,7 +1090,7 @@ if (window.Proj4js) {
             urls = mapConfig['url'];
             if (!urls)
                 throw 'TMS URL must be set when using TMS Map type';
-            var projection = mapConfig['srs'] ? new OpenLayers.Projection(mapConfig['srs']) : OL_HELPERS.Mercator // force SRS to 3857 if using OSM baselayer
+            var projection = mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.Mercator // force SRS to 3857 if using OSM baselayer
             var maxExtent = mapConfig['extent'] && eval(mapConfig['extent'])
 
             var baseMapLayer = new OpenLayers.Layer.TMS('Base Layer', urls, {
@@ -1012,14 +1114,23 @@ if (window.Proj4js) {
             urls = mapConfig['url'];
             if (!urls)
                 throw 'URL must be set when using XYZ type';
+            /* TODO_OL4 should ${x} be supported ?
             if (urls.indexOf('${x}') === -1) {
                 urls = urls.replace('{x}', '${x}').replace('{y}', '${y}').replace('{z}', '${z}');
             }
-            var baseMapLayer = new OpenLayers.Layer.XYZ('Base Layer', urls, {
-                isBaseLayer: isBaseLayer,
-                sphericalMercator: true,
-                wrapDateLine: true,
-                attribution: mapConfig.attribution
+            */
+            var baseMapLayer = new ol.layer.Tile(
+                {title: 'Base Layer',
+                 type: 'base', // necessary for ol3-layerswitcher
+                 source:new ol.source.XYZ({
+                    url: urls,
+                     /* TODO_OL4 what to do with this?
+                    isBaseLayer: isBaseLayer,
+                    sphericalMercator: true,
+                    wrapDateLine: true,
+                    attribution: mapConfig.attribution
+                    */
+                })
             });
 
             callback (baseMapLayer);
@@ -1050,24 +1161,39 @@ if (window.Proj4js) {
 
             var useTiling = mapConfig['useTiling'] === undefined || mapConfig['useTiling']
 
-            var baseMapLayer = new OpenLayers.Layer.WMSLayer(
-                mapConfig['layer'],
-                urls,
-                {layers: mapConfig['layer'],
-                    transparent: false,
-                    srs : "EPSG:4326"},
-                {
-                    title: 'Base Layer',
-                    isBaseLayer: true,
-                    singleTile: !useTiling,
-                    //tileSize : useTiling ? new OpenLayers.Size(512,512) : undefined,
-                    visibility: true,
-                    format: mapConfig['format'],
-                    projection: mapConfig['srs'] ? new OpenLayers.Projection(mapConfig['srs']) : OL_HELPERS.Mercator, // force SRS to 3857 if using OSM baselayer
-                    ratio: 1,
-                    maxExtent: mapConfig['extent'] && eval(mapConfig['extent'])
-                }
-            )
+
+            var baseMapLayer;
+
+            if (useTiling) {
+                baseMapLayer = new ol.layer.Tile({
+                    title: mapConfig['layer'],
+                    visible: true,
+                    extent: mapConfig['extent'] && eval(mapConfig['extent']),  /* TODO_OL4 this correct to set maxExtent ? */
+                    // projection is set here as a hint for the basemap layer switcher
+                    projection: mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.Mercator,
+                    source: new ol.source.TileWMS({
+                        url: urls,
+                        params: {layers: mapConfig['layer'],
+                            TRANSPARENT: false,
+                            EXCEPTIONS: "INIMAGE"},
+                    })
+                })
+            } else {
+                baseMapLayer = new ol.layer.Image({
+                    title: mapConfig['layer'],
+                    visible: true,
+                    extent: mapConfig['extent'] && eval(mapConfig['extent']),  /* TODO_OL4 this correct to set maxExtent ? */
+                    // projection is set here as a hint for the basemap layer switcher
+                    projection: mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.Mercator,
+                    source: new ol.source.ImageWMS({
+                        url: urls,
+                        params: {LAYERS: mapConfig['layer'],
+                            TRANSPARENT: false,
+                            EXCEPTIONS: "INIMAGE"},
+                        ratio : 1,
+                    })
+                })
+            }
 
             callback (baseMapLayer);
 
