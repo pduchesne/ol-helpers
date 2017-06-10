@@ -333,7 +333,7 @@ if (window.Proj4js) {
         });
     }
 
-    var parseWFSCapas = function (url, callback, failCallback) {
+    var fetchWFSCapas = function (url, callback, failCallback) {
 
 
         var params = {
@@ -348,7 +348,7 @@ if (window.Proj4js) {
             }
         ).then(
             function(text) {
-                var capabilities = $.parseXML(text);
+                var capabilities = OL_HELPERS.parseWfsCapabilities($.parseXML(text))
                 callback(capabilities)
             }
         ).catch(function(ex) {
@@ -358,7 +358,7 @@ if (window.Proj4js) {
     }
 
 
-    var parseWFSFeatureTypeDescr = function (url, ftName, ver, callback, failCallback) {
+    var fetchWFSFeatureTypeDescr = function (url, ftName, ver, callback, failCallback) {
         var params = {
             SERVICE: "WFS",
             REQUEST: "DescribeFeatureType",
@@ -374,7 +374,7 @@ if (window.Proj4js) {
         ).then(
             function(text) {
                 var capabilities = $.parseXML(text);
-                callback(capabilities)
+                callback(OL_HELPERS.parseFeatureTypeDescription(capabilities))
             }
         ).catch(failCallback || function(ex) {
                 console.warn("Trouble getting FT description doc");
@@ -525,51 +525,100 @@ if (window.Proj4js) {
 
     }
 
+    OL_HELPERS.parseWfsCapabilities = function(xmlDoc) {
+        var $capas = $(xmlDoc);
+
+        var ver = $capas.find('WFS_Capabilities').attr('version');
+        var featureTypes = $capas.find('FeatureTypeList').find('FeatureType');
+        featureTypes = featureTypes.get().map(function (featureType, idx) {
+            var $featureType = $(featureType);
+
+            var bbox;
+            // let's be lenient and look for latlonbbox or wgs84bbox regardless of advertised version
+            var wgs84bbox = $featureType.find('WGS84BoundingBox')
+            var latlonbbox = $featureType.find('LatLongBoundingBox')
+            if (wgs84bbox.length) {
+                var ll = wgs84bbox.find('LowerCorner').text().split(' ');
+                var ur = wgs84bbox.find('UpperCorner').text().split(' ')
+                bbox = [ll[0], ll[1], ur[0], ur[1]]
+            } else if (latlonbbox.length) {
+                bbox = [latlonbbox.attr('minx'), latlonbbox.attr('miny'), latlonbbox.attr('maxx'), latlonbbox.attr('maxy')]
+            }
+
+            return {
+                name: $featureType.find('Name').text(),
+                title: $featureType.find('Title').text(),
+                defaultSrs: $featureType.find('DefaultSRS, DefaultCRS').text(),
+                otherSrs: $featureType.find('SRS').text(),
+                wgs84BBOX: bbox
+            }
+        })
+        return {
+            version: ver,
+            featureTypes: featureTypes
+        }
+    }
+
+    OL_HELPERS.parseFeatureTypeDescription = function(xmlDoc) {
+        var $descr = $(xmlDoc);
+
+        // WARN extremely fragile and hackish way to parse FT schema
+        var $props = $descr.find('complexType').find('sequence').find('element');
+        var featureTypeProperties = $props.get().map(function(prop) {
+            return {
+                type: $(prop).attr('type'),
+                name: $(prop).attr('name')
+            }
+        })
+
+        return {
+            properties: featureTypeProperties
+        }
+    }
+
+
     OL_HELPERS.withFeatureTypesLayers = function (url, layerProcessor, ftName, map, useGET) {
 
         var deferredResult = $.Deferred()
         url = OL_HELPERS.cleanOGCUrl(url)
-        parseWFSCapas(
+        fetchWFSCapas(
             url,
             function (capas) {
-                var $capas = $(capas)
 
                 /* TODO_OL4 should we have a dedicated WFS parser that handles multiple versions ? */
-                var ver = $capas.find('WFS_Capabilities').attr('version')
-                if (ver == "2.0.0") ver = "1.1.0"  // 2.0.0 causes failures in some cases (e.g. Geoserver TOPP States WFS)
+                var ver = capas.version
+                if (ver == "2.0.0")
+                    ver = "1.1.0"  // 2.0.0 causes failures in some cases (e.g. Geoserver TOPP States WFS)
 
-                var candidates = $capas.find('FeatureTypeList').find('FeatureType')
-                if (ftName) candidates = candidates.filter(function (ft) {
-                    return ft.find('Name').text() == ftName
+                var candidates = capas.featureTypes
+                if (ftName) candidates = capas.featureTypes.filter(function (ft) {
+                    return ft.name == ftName
                 })
 
                 var deferredLayers = []
 
-                candidates.each(function (idx, candidate) {
-                    var $candidate = $(candidate);
+                candidates.forEach(function (candidate, idx) {
                     var deferredLayer = $.Deferred();
                     deferredLayers.push(deferredLayer);
 
-                    parseWFSFeatureTypeDescr(
+                    fetchWFSFeatureTypeDescr(
                         url,
-                        $candidate.find('Name').text(), /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                        candidate.name, /* TODO_OL4 deal with WFS that require the prefix to be included : candidate.prefixedName*/
                         ver,
                         function (descr) {
-                            var $descr = $(descr);
                             var ftLayer;
 
                             // WARN extremely fragile and hackish way to parse FT schema
-                            var featureTypeProperties = $descr.find('complexType').find('sequence').find('element');
+                            var featureTypeProperties = descr.properties;
                             if (featureTypeProperties.length) {
 
                                 var srs;
                                 var isLatLon = false;
 
-                                var defaultSrs = $candidate.find('>DefaultSRS').text()
+                                // support DefaultCRS for WFS 2.0
+                                var defaultSrs = candidate.defaultSrs
 
-                                var altSrs = $candidate.find('>SRS').map(function() {
-                                    return $(this).text();
-                                }).get()
+                                var altSrs = candidate.otherSrs
                                 if (defaultSrs) { // sometimes no default srs is found (misusage of DefaultSRS in 2.0 version, ...)
 
                                     var allSrs = (altSrs || []).concat([defaultSrs])
@@ -602,15 +651,14 @@ if (window.Proj4js) {
                                 }
 
                                 if (srs.toString().match(/urn:ogc:def:crs:EPSG:.*:4326$/) ||
-                                    srs.getCode().startsWith("urn:ogc:def:crs:") && srs.proj.oProj && srs.proj.oProj.units == "degrees") {
+                                    srs.getCode().startsWith("urn:ogc:def:crs:") && srs.getUnits() == "degrees") {
                                     isLatLon = true // using long form SRS, assume it is lat/lon axis order
                                 }
 
 
 
-                                var geomProps = featureTypeProperties.filter(function (idx, prop) {
-                                    var type = $(prop).attr('type');
-                                    return type && type.startsWith("gml");
+                                var geomProps = featureTypeProperties.filter(function (prop, idx) {
+                                    return prop.type && prop.type.startsWith("gml");
                                 })
 
                                 // ignore feature types with no gml prop. Correct ?
@@ -623,7 +671,7 @@ if (window.Proj4js) {
                                             url: url,
                                             // If specifying featureType, it is mandatory to also specify featureNS
                                             // if not, OL will introspect and find all NS and feature types
-                                            //featureType: $candidate.find('Name').text(), /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                                            //featureType: candidate.name, /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
                                             //featureNS: candidate.featureNS,
 
                                             //gmlFormat: new ol.format.GML2()
@@ -633,19 +681,19 @@ if (window.Proj4js) {
                                         })
                                         ftLayer = new ol.layer.Vector({
                                             source: new ol.source.Vector({
-                                                loader: function(extent) {
+                                                loader: function(extent, resolution, mapProjection) {
 
                                                     var params = {
                                                         service: 'WFS',
                                                         version: ver,
                                                         request: 'GetFeature',
                                                         maxFeatures: MAX_FEATURES,
-                                                        typename: $candidate.find('Name').text(), /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                                                        typename: candidate.name, /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
                                                         srsname: srs.getCode(),
                                                         /* explicit SRS must be provided here, as some impl (geoserver)
                                                            take lat/lon axis order by default.
                                                            EPSG:4326 enforces lon/lat order */
-                                                        bbox: extent.join(',') + ','+srs.getCode()
+                                                        bbox: extent.join(',') + ','+mapProjection.getCode()
                                                     }
 
                                                     fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
@@ -681,6 +729,7 @@ if (window.Proj4js) {
                                                 },
                                                 strategy: ol.loadingstrategy.bbox,
                                                 projection: srs,
+                                                //maxExtent:
                                             }),
                                             visible: idx == 0
                                         });
