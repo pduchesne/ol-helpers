@@ -686,6 +686,7 @@ if (window.Proj4js) {
                                             //geometryName: $(geomProps[0]).attr('name')
                                         })
                                         ftLayer = new ol.layer.Vector({
+                                            title: candidate.title,
                                             source: new ol.source.Vector({
                                                 loader: function(extent, resolution, mapProjection) {
 
@@ -1184,7 +1185,7 @@ if (window.Proj4js) {
             */
             var baseMapLayer = new ol.layer.Tile(
                 {title: 'Base Layer',
-                 type: 'base', // necessary for ol3-layerswitcher
+                 type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
                  source:new ol.source.XYZ({
                     url: urls,
                      /* TODO_OL4 what to do with this?
@@ -1229,6 +1230,7 @@ if (window.Proj4js) {
 
             if (useTiling) {
                 baseMapLayer = new ol.layer.Tile({
+                    type: isBaseLayer?'base':undefined,
                     title: mapConfig['layer'],
                     visible: true,
                     extent: mapConfig['extent'] && eval(mapConfig['extent']),  /* TODO_OL4 this correct to set maxExtent ? */
@@ -1238,11 +1240,12 @@ if (window.Proj4js) {
                         url: urls,
                         params: {layers: mapConfig['layer'],
                             TRANSPARENT: false,
-                            EXCEPTIONS: "INIMAGE"},
+                            EXCEPTIONS: "INIMAGE"}
                     })
                 })
             } else {
                 baseMapLayer = new ol.layer.Image({
+                    type: isBaseLayer?'base':undefined,
                     title: mapConfig['layer'],
                     visible: true,
                     extent: mapConfig['extent'] && eval(mapConfig['extent']),  /* TODO_OL4 this correct to set maxExtent ? */
@@ -1253,11 +1256,10 @@ if (window.Proj4js) {
                         params: {LAYERS: mapConfig['layer'],
                             TRANSPARENT: false,
                             EXCEPTIONS: "INIMAGE"},
-                        ratio : 1,
+                        ratio : 1
                     })
                 })
             }
-
             callback (baseMapLayer);
 
         }
