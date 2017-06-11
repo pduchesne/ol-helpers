@@ -94,6 +94,12 @@ if (window.Proj4js) {
         }
         */
 
+    // Returns the WGS84 bbox
+    var getFTSourceExtent = function() {
+        var bbox = this.get('ftDescr') && this.get('ftDescr').wgs84bbox;
+        return bbox;
+    }
+
     /* TODO_OL4 : redefine a strategy to extract extent from parsed capabilities
     OpenLayers.Layer.WFSLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
         {
@@ -550,7 +556,7 @@ if (window.Proj4js) {
                 title: $featureType.find('Title').text(),
                 defaultSrs: $featureType.find('DefaultSRS, DefaultCRS').text(),
                 otherSrs: $featureType.find('SRS').text(),
-                wgs84BBOX: bbox
+                wgs84bbox: bbox
             }
         })
         return {
@@ -693,6 +699,9 @@ if (window.Proj4js) {
                                                         /* explicit SRS must be provided here, as some impl (geoserver)
                                                            take lat/lon axis order by default.
                                                            EPSG:4326 enforces lon/lat order */
+                                                        /* TODO_OL4 check if map proj is compatible with WFS
+                                                           some versions/impls need always 4326 bbox
+                                                           do on-the-fly reprojection if needed */
                                                         bbox: extent.join(',') + ','+mapProjection.getCode()
                                                     }
 
@@ -728,12 +737,14 @@ if (window.Proj4js) {
                                                         })
                                                 },
                                                 strategy: ol.loadingstrategy.bbox,
-                                                projection: srs,
+                                                projection: srs
                                                 //maxExtent:
                                             }),
                                             visible: idx == 0
                                         });
-
+                                        // override getExtent to take advertised bbox into account first
+                                        ftLayer.getSource().set('ftDescr',candidate);
+                                        ftLayer.getSource().getFullExtent = getFTSourceExtent;
 
 
                                          /* TODO_OL4 : still to integrate : BBOXWithMax
