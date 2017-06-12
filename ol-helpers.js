@@ -18,7 +18,8 @@ if (window.Proj4js) {
     // definitions can be found at http://spatialreference.org/ref/epsg/{xxxx}/proj4js/
 
     // warn : 31370 definition from spatialreference.org is wrong
-    window.Proj4js.defs["EPSG:31370"] = "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.868628,52.297783,-103.723893,0.336570,-0.456955,1.842183,-1.2747 +units=m +no_defs";
+    proj4.defs("EPSG:31370", "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.868628,52.297783,-103.723893,0.336570,-0.456955,1.842183,-1.2747 +units=m +no_defs");
+    //window.Proj4js.defs["EPSG:31370"] = "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.868628,52.297783,-103.723893,0.336570,-0.456955,1.842183,-1.2747 +units=m +no_defs";
 
     window.Proj4js.defs["EPSG:28992"] = "+proj=sterea +lat_0=52.15616055555555 +lon_0=5.38763888888889 +k=0.999908 +x_0=155000 +y_0=463000 +ellps=bessel +units=m +towgs84=565.2369,50.0087,465.658,-0.406857330322398,0.350732676542563,-1.8703473836068,4.0812 +no_defs <>";
     window.Proj4js.defs["EPSG:3812"] = "+proj=lcc +lat_1=49.83333333333334 +lat_2=51.16666666666666 +lat_0=50.797815 +lon_0=4.359215833333333 +x_0=649328 +y_0=665262 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
@@ -97,6 +98,11 @@ if (window.Proj4js) {
     // Returns the WGS84 bbox
     var getFTSourceExtent = function() {
         var bbox = this.get('ftDescr') && this.get('ftDescr').wgs84bbox;
+        return bbox;
+    }
+
+    var getWMTSSourceExtent = function() {
+        var bbox = this.get('mlDescr') && this.get('ftDescr').bounds;
         return bbox;
     }
 
@@ -413,28 +419,28 @@ if (window.Proj4js) {
     }
 
     OL_HELPERS.parseWMTSCapas = function (url, callback, failCallback) {
-        var wmtsFormat = new OpenLayers.Format.WMTSCapabilities();
+        var wmtsFormat = new ol.format.WMTSCapabilities();
+        var params = {
+            SERVICE: "WMTS",
+            REQUEST: "GetCapabilities",
+            VERSION: "1.0.0"
+        };
 
-        OpenLayers.Request.GET({
-            url: url,
-            params: {
-                SERVICE: "WMTS",
-                REQUEST: "GetCapabilities",
-                VERSION: "1.0.0"
-            },
-            success: function (request) {
-                var doc = request.responseXML;
-                if (!doc || !doc.documentElement) {
-                    doc = request.responseText;
-                }
-                var capabilities = wmtsFormat.read(doc)
-                callback(capabilities)
-            },
-            failure: failCallback || function () {
-                alert("Trouble getting capabilities doc");
-                OpenLayers.Console.error.apply(OpenLayers.Console, arguments);
+        fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
+            {method:'GET'}
+        ).then(
+            function(response) {
+                return response.text();
             }
-        });
+        ).then(
+            function(text) {
+                var capabilities = wmtsFormat.read(text);
+                callback(capabilities)
+            }
+        ).catch(failCallback || function(ex) {
+                console.warn("Trouble getting capabilities doc");
+                console.warn(ex);
+            })
     }
 
     OL_HELPERS.createKMLLayer = function (url) {
@@ -921,9 +927,9 @@ if (window.Proj4js) {
             capaUrl,
             function (capas) {
 
-                var candidates = capas.contents.layers
+                var candidates = capas['Contents']['Layer']
                 if (layerName) candidates = candidates.filter(function (layer) {
-                    return layer.identifier == layerName
+                    return layer['Identifier'] == layerName
                 })
 
                 var ver = capas.version
@@ -934,6 +940,18 @@ if (window.Proj4js) {
                     var deferredLayer = $.Deferred()
                     deferredLayers.push(deferredLayer)
 
+                    var options = ol.source.WMTS.optionsFromCapabilities(capas, {
+                        layer: candidate['Identifier'],
+                        projection: projection
+                    });
+
+                    var mapLayer = new ol.layer.Tile({
+                        title: candidate['Title'],
+                        visible: idx == 0,
+                        source: new ol.source.WMTS(options)
+                    })
+
+                    /*
                     var mapLayer = new OpenLayers.Format.WMTSCapabilities().createLayer(
                         capas,
                         {
@@ -948,8 +966,10 @@ if (window.Proj4js) {
                             //requestEncoding : "KVP" //TODO is this needed ?
                         }
                     );
+                    */
 
-                    mapLayer.getDataExtent = OpenLayers.Layer.WMTSLayer.prototype.getDataExtent
+                    mapLayer.getSource().set('mlDescr',candidate);
+                    mapLayer.getSource().getFullExtent = getWMTSSourceExtent;
 
                     layerProcessor(mapLayer)
 
@@ -1184,7 +1204,7 @@ if (window.Proj4js) {
             }
             */
             var baseMapLayer = new ol.layer.Tile(
-                {title: 'Base Layer',
+                {title: mapConfig['title'],
                  type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
                  source:new ol.source.XYZ({
                     url: urls,
@@ -1203,7 +1223,9 @@ if (window.Proj4js) {
             OL_HELPERS.withWMTSLayers(
                 mapConfig['url'],
                 function(layer) {
-                    layer.isBaseLayer = true
+                    layer.set('type', 'base');
+                    mapConfig['title'] && layer.set('title', mapConfig['title']);
+                    /* TODO_OL4
                     layer.options.attribution = mapConfig.attribution
                     layer.maxExtent = layer.mlDescr.bounds.clone().transform(OL_HELPERS.EPSG4326, layer.projection)
 
@@ -1211,6 +1233,7 @@ if (window.Proj4js) {
                     if (layer.projection.projCode == "OGC:CRS84")
                         layer.projection = OL_HELPERS.EPSG4326
 
+*/
                     callback (layer);
                 },
                 mapConfig['layer'],
