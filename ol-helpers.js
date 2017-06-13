@@ -17,6 +17,7 @@ if (window.Proj4js) {
     // add your projection definitions here
     // definitions can be found at http://spatialreference.org/ref/epsg/{xxxx}/proj4js/
 
+    proj4.defs['OGC:CRS84'] = proj4.defs['EPSG:4326']
     // warn : 31370 definition from spatialreference.org is wrong
     proj4.defs("EPSG:31370", "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.868628,52.297783,-103.723893,0.336570,-0.456955,1.842183,-1.2747 +units=m +no_defs");
     //window.Proj4js.defs["EPSG:31370"] = "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.868628,52.297783,-103.723893,0.336570,-0.456955,1.842183,-1.2747 +units=m +no_defs";
@@ -102,7 +103,7 @@ if (window.Proj4js) {
     }
 
     var getWMTSSourceExtent = function() {
-        var bbox = this.get('mlDescr') && this.get('ftDescr').bounds;
+        var bbox = this.get('mlDescr') && this.get('mlDescr').WGS84BoundingBox;
         return bbox;
     }
 
@@ -940,16 +941,41 @@ if (window.Proj4js) {
                     var deferredLayer = $.Deferred()
                     deferredLayers.push(deferredLayer)
 
-                    var options = ol.source.WMTS.optionsFromCapabilities(capas, {
-                        layer: candidate['Identifier'],
-                        projection: projection
-                    });
+                    var params = {
+                        layer: candidate['Identifier']
+                    };
+                    // WMTS.optionsFromCapabilities does not accept undefined projection value in its params
+                    if (projection)
+                        params.projection = projection
+
+                    var options = ol.source.WMTS.optionsFromCapabilities(capas, params);
 
                     var mapLayer = new ol.layer.Tile({
                         title: candidate['Title'],
                         visible: idx == 0,
                         source: new ol.source.WMTS(options)
                     })
+
+                    if (candidate.Dimension && candidate.Dimension.length>0) {
+                        var urlTemplate = candidate['ResourceURL'] && candidate['ResourceURL'].length>0 && candidate['ResourceURL'][0].template;
+                        var urlParams = urlTemplate && urlTemplate.match(/\{(\w+?)\}/g);
+
+                        var dimensions = {};
+                        for (var idx=0;idx<candidate.Dimension.length;idx++) {
+                            var dim = candidate.Dimension[idx];
+                            var id = dim['Identifier'];
+                            // look for a case insensitive match (OL is case sensitive in that respect, some capabilities not)
+                            for (var idx in urlParams) {
+                                var paramName = urlParams[idx].substring(1, urlParams[idx].length-1);
+                                if (paramName.toLowerCase() == id) {
+                                    id = paramName;
+                                    break;
+                                }
+                            }
+                            dimensions[id] = dim['Default']
+                        }
+                        mapLayer.getSource().updateDimensions(dimensions);
+                    }
 
                     /*
                     var mapLayer = new OpenLayers.Format.WMTSCapabilities().createLayer(
@@ -1224,6 +1250,7 @@ if (window.Proj4js) {
                 mapConfig['url'],
                 function(layer) {
                     layer.set('type', 'base');
+                    mapConfig['dimensions'] && layer.getSource().updateDimensions(mapConfig['dimensions']);
                     mapConfig['title'] && layer.set('title', mapConfig['title']);
                     /* TODO_OL4
                     layer.options.attribution = mapConfig.attribution
