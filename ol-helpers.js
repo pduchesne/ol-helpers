@@ -1060,23 +1060,36 @@ if (window.Proj4js) {
     }
 
 
+
     OL_HELPERS.createGeoJSONLayer = function (url) {
 
-        var geojson = new OpenLayers.Layer.Vector(
-            "GeoJSON",
-            {
-                projection: EPSG4326,
-                strategies: [new OpenLayers.Strategy.Fixed()],
-                style: default_style,
-                protocol: new OpenLayers.Protocol.HTTP({
-                    url: url,
-                    format: new OpenLayers.Format.GeoJSON()
-                })
-            });
+        // use a custom loader to set source state
+        var kmlLoader = ol.featureloader.loadFeaturesXhr(
+            url,
+            new ol.format.GeoJSON(),
+            function(features, dataProjection) {
+                this.addFeatures(features);
+                // set source as ready once features are loaded
+                this.setState(ol.source.State.READY);
+            },
+            /* FIXME handle error */ ol.nullFunction);
 
-        //TODO add styles
+        var kml = new ol.layer.Vector({
+            title: 'GeoJSON',
+            source: new ol.source.Vector({
+                loader: function(extent, resolution, projection) {
+                    // set source as loading before reading the KML
+                    this.setState(ol.source.State.LOADING);
+                    return kmlLoader.call(this, extent, resolution, projection)
+                }
 
-        return geojson
+            })
+        });
+
+        // force pre-load of KML to init extent
+        kml.getSource().loadFeatures();
+
+        return kml;
     }
 
 
