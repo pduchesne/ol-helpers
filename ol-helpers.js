@@ -107,6 +107,13 @@ if (window.Proj4js) {
         return bbox;
     }
 
+    var getWMSSourceExtent = function() {
+        //1.1.0 : LatLonBoundingBox
+        //1.3   : EX_GeographicBoundingBox
+        var bbox = this.get('mlDescr') && this.get('mlDescr').EX_GeographicBoundingBox;
+        return bbox;
+    }
+
     /* TODO_OL4 : redefine a strategy to extract extent from parsed capabilities
     OpenLayers.Layer.WFSLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
         {
@@ -444,22 +451,58 @@ if (window.Proj4js) {
             })
     }
 
+    /* Define a custom KML Format that accepts an onread callback
+    *  to read global KML metadata (title, description, ...)      */
+
+      OL_HELPERS.format = OL_HELPERS.format || {}
+    OL_HELPERS.format.KML = function(opt_options) {
+
+        ol.format.KML.call(this, opt_options);
+        this.onread = opt_options && opt_options.onread;
+    };
+    ol.inherits(OL_HELPERS.format.KML, ol.format.KML);
+
+    OL_HELPERS.format.KML.prototype.readDocumentOrFolder_ = function(node, objectStack) {
+        var result = ol.format.KML.prototype.readDocumentOrFolder_.call(this, node, objectStack);
+        this.onread && this.onread(node);
+        return result;
+    };
+
     OL_HELPERS.createKMLLayer = function (url) {
 
-        var kml = new OpenLayers.Layer.Vector("KML", {
-            projection: EPSG4326,
-            strategies: [new OpenLayers.Strategy.Fixed()],
-            protocol: new OpenLayers.Protocol.HTTP({
-                url: url,
-                format: new OpenLayers.Format.KML({
-                    extractStyles: true,
-                    extractAttributes: true,
-                    maxDepth: 2
-                })
-            })
-        })
+        // use a custom loader to set source state
+        var kmlLoader = ol.featureloader.loadFeaturesXhr(
+            url,
+            new OL_HELPERS.format.KML({
+                onread: function(node) {
+                    var nameNode = node.querySelector(":scope > name");
+                    var name = nameNode && nameNode.textContent;
+                    name && kml.set('title', name);
+                }
+            }),
+            function(features, dataProjection) {
+                this.addFeatures(features);
+                // set source as ready once features are loaded
+                this.setState(ol.source.State.READY);
+            },
+            /* FIXME handle error */ ol.nullFunction);
 
-        return kml
+        var kml = new ol.layer.Vector({
+            title: 'KML',
+            source: new ol.source.Vector({
+                loader: function(extent, resolution, projection) {
+                    // set source as loading before reading the KML
+                    this.setState(ol.source.State.LOADING);
+                    return kmlLoader.call(this, extent, resolution, projection)
+                }
+
+            })
+        });
+
+        // force pre-load of KML to init extent
+        kml.getSource().loadFeatures();
+
+        return kml;
     }
 
     OL_HELPERS.createGFTLayer = function (tableId, GoogleAPIKey) {
@@ -900,6 +943,9 @@ if (window.Proj4js) {
                             })
                         })
                     }
+
+                    mapLayer.getSource().set('mlDescr',candidate);
+                    mapLayer.getSource().getFullExtent = getWMSSourceExtent;
 
                     layerProcessor(mapLayer)
 
