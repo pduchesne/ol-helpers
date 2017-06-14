@@ -41,10 +41,24 @@ if (window.Proj4js) {
     var MAX_FEATURES = 300
 
      /* TODO_OL4
-     var default_style = _.extend({}, OpenLayers.Feature.Vector.style['default']);
-     default_style.fillOpacity = 0.2;
-     default_style.graphicOpacity = 1;
-     default_style.strokeWidth = "2";
+      var context = {
+      getColor: function(feature) {
+      return (feature.data.RGB && "rgb("+feature.data.RGB+")") || "#5784BF"
+      }
+      };
+      var template = {
+      fillColor: "${getColor}", // using context.getColor(feature)
+      fillOpacity: 0.1,
+      //graphicOpacity: 1,
+      strokeColor: "#2a6496",
+      strokeWidth: 1,
+      pointRadius: 5
+      };
+      var defaultStyleMap = OL_HELPERS.defaultStyleMap = new OpenLayers.StyleMap({
+      'default': new OpenLayers.Style(template, {context: context}),
+      'select': new OpenLayers.Style(_.extend({}, template, {fillOpacity: 0.4, strokeWidth: 2}), {context: context}),
+      'temporary': new OpenLayers.Style(template, {context: context})
+      })
      */
     var stroke = new ol.style.Stroke({color: 'black', width: 2});
     var fill = new ol.style.Fill({color: 'red'});
@@ -115,6 +129,18 @@ if (window.Proj4js) {
     }
 
     /* TODO_OL4 : redefine a strategy to extract extent from parsed capabilities
+    OpenLayers.Layer.ArcgisVectorLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
+        {
+            getDataExtent: function () {
+                var bbox = this.layerDescr &&
+                    (this.layerDescr.bounds ||
+                        (this.layerDescr.latLongBoundingBox && new OpenLayers.Bounds(this.layerDescr.latLongBoundingBox)))
+                return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
+                    || OpenLayers.Layer.Vector.prototype.getDataExtent.apply(this, arguments)
+            }
+        }
+    )
+
     OpenLayers.Layer.WFSLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
         {
             getDataExtent: function () {
@@ -122,7 +148,7 @@ if (window.Proj4js) {
                     (this.ftDescr.bounds || // WFS 1.1+
                         (this.ftDescr.latLongBoundingBox && new OpenLayers.Bounds(this.ftDescr.latLongBoundingBox))) // WFS 1.0
                 return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.Vector.prototype.getDataExtent.call(this, arguments)
+                    || OpenLayers.Layer.Vector.prototype.getDataExtent.apply(this, arguments)
             }
         }
     )
@@ -133,7 +159,7 @@ if (window.Proj4js) {
                 return (this.mlDescr &&
                     this.mlDescr.llbbox &&
                     new OpenLayers.Bounds(this.mlDescr.llbbox).clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.WMS.prototype.getDataExtent.call(this, arguments)
+                    || OpenLayers.Layer.WMS.prototype.getDataExtent.apply(this, arguments)
             }
         }
     )
@@ -144,11 +170,107 @@ if (window.Proj4js) {
                 return (this.mlDescr &&
                     this.mlDescr.bounds &&
                     this.mlDescr.bounds.clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.WMTS.prototype.getDataExtent.call(this, arguments)
+                    || OpenLayers.Layer.WMTS.prototype.getDataExtent.apply(this, arguments)
             }
         }
     )
     */
+
+
+    /* TODO_OL4 impleemnt LoggingMap
+     OpenLayers.LoggingMap = OpenLayers.Class(OpenLayers.Map,
+     {
+     initialize: function(options) {
+     OpenLayers.Map.prototype.initialize.apply(this, arguments)
+     this.loadingObjects = []
+
+     this.loadingDiv = options.loadingDiv
+     if (!this.loadingDiv) {
+     this.loadingDiv = OpenLayers.Util.createDiv()
+     this.loadingDiv.textContent = "Loading..."
+     this.loadingDiv.style.zIndex = 3000
+     }
+
+     this.viewPortDiv.appendChild(this.loadingDiv);
+     },
+
+     updateLoadingStatus: function() {
+     if (this.loadingObjects.length == 0) {
+     this.loadingDiv.style.display = 'none'
+     } else {
+     this.loadingDiv.style.display = ''
+     }
+     },
+
+     addLayer: function(layer) {
+     OpenLayers.Map.prototype.addLayer.apply(this, arguments)
+
+     var _this = this
+
+     layer.events.register("loadstart", layer, function() {
+     if (_this.loadingObjects.indexOf(this) >= 0) {
+     console.log("Layer starts twice : "+this.id)
+     } else {
+     _this.loadingObjects.push(this)
+     }
+     _this.updateLoadingStatus()
+     });
+
+     layer.events.register("loadend", layer, function() {
+     var idx = _this.loadingObjects.indexOf(this)
+     if (idx >= 0) {
+     _this.loadingObjects.splice(idx, 1)
+     }
+
+     _this.updateLoadingStatus()
+     });
+
+     layer.events.register("loaderror", layer, function(evt) {
+     var idx = _this.loadingObjects.indexOf(this)
+     if (idx >= 0) {
+     _this.loadingObjects.splice(idx, 1)
+     }
+
+     _this.updateLoadingStatus()
+
+     console.warn("Layer fails top load :"+evt)
+     });
+
+     layer.events.register("tileloadstart", layer, function(evt) {
+     if (_this.loadingObjects.indexOf(evt.tile) >= 0) {
+     console.log("Tile starts twice : "+evt.tile.id)
+     } else {
+     _this.loadingObjects.push(evt.tile)
+     }
+     _this.updateLoadingStatus()
+     });
+
+     layer.events.register("tileloaded", layer, function(evt) {
+     var idx = _this.loadingObjects.indexOf(evt.tile)
+     if (idx >= 0) {
+     _this.loadingObjects.splice(idx, 1)
+     }
+
+     _this.updateLoadingStatus()
+     });
+
+     layer.events.register("tileerror", layer, function(evt) {
+     var idx = _this.loadingObjects.indexOf(evt.tile)
+     if (idx >= 0) {
+     _this.loadingObjects.splice(idx, 1)
+     }
+
+     _this.updateLoadingStatus()
+
+     console.warn("Tile fails top load :"+evt)
+     });
+     }
+
+     }
+     )
+    
+     */
+
 
     /* TODO_OL4 : custom layer switcher
     OpenLayers.Control.HilatsLayerSwitcher = OpenLayers.Class(OpenLayers.Control.LayerSwitcher,
@@ -242,7 +364,7 @@ if (window.Proj4js) {
                     var thisLayer = layer
                     // snap to layer bbox action
                     var gotoExtentButton =
-                        $("<span>[]</span>")
+                        $("<span class='zoomToExtentIcon'>[]</span>")
                             .click(function() {
                                 var bbox = thisLayer.getDataExtent() || thisLayer.getExtent()
                                 //var transformedBbox = bbox.clone().transform(layer.projection, map.getProjection())
@@ -294,10 +416,10 @@ if (window.Proj4js) {
     var parseKVP = OL_HELPERS.parseKVP = function (kvpString) {
         var kvps = (kvpString && kvpString.split("&")) || []
         var kvpMap = {}
-        for (var idx in  kvps) {
-            var kv = kvps[idx].split('=')
+        kvps.forEach(function(val, idx) {
+            var kv = val.split('=')
             kvpMap[kv[0].toLowerCase()] = kv[1]
-        }
+        })
 
         return kvpMap
     }
@@ -468,35 +590,36 @@ if (window.Proj4js) {
         return result;
     };
 
-    OL_HELPERS.createKMLLayer = function (url) {
+OL_HELPERS.createKMLLayer = function (url) {
 
-        // use a custom loader to set source state
-        var kmlLoader = ol.featureloader.loadFeaturesXhr(
-            url,
-            new OL_HELPERS.format.KML({
-                onread: function(node) {
-                    var nameNode = node.querySelector(":scope > name");
-                    var name = nameNode && nameNode.textContent;
-                    name && kml.set('title', name);
-                }
-            }),
-            function(features, dataProjection) {
-                this.addFeatures(features);
-                // set source as ready once features are loaded
-                this.setState(ol.source.State.READY);
-            },
-            /* FIXME handle error */ ol.nullFunction);
+    // use a custom loader to set source state
+    var kmlLoader = ol.featureloader.loadFeaturesXhr(
+        url,
+        new OL_HELPERS.format.KML({
+            onread: function(node) {
+                var nameNode = node.querySelector(":scope > name");
+                var name = nameNode && nameNode.textContent;
+                name && kml.set('title', name);
+            }
+        }),
+        function(features, dataProjection) {
+            this.addFeatures(features);
+            // set source as ready once features are loaded
+            this.setState(ol.source.State.READY);
+        },
+        /* FIXME handle error */ ol.nullFunction);
 
-        var kml = new ol.layer.Vector({
-            title: 'KML',
-            source: new ol.source.Vector({
-                loader: function(extent, resolution, projection) {
-                    // set source as loading before reading the KML
-                    this.setState(ol.source.State.LOADING);
-                    return kmlLoader.call(this, extent, resolution, projection)
-                }
+    var kml = new ol.layer.Vector({
+        title: 'KML',
+        //styleMap: defaultStyleMap, // TODO_OL4
+        source: new ol.source.Vector({
+            loader: function(extent, resolution, projection) {
+                // set source as loading before reading the KML
+                this.setState(ol.source.State.LOADING);
+                return kmlLoader.call(this, extent, resolution, projection)
+            }
 
-            })
+        })
         });
 
         // force pre-load of KML to init extent
@@ -508,6 +631,7 @@ if (window.Proj4js) {
     OL_HELPERS.createGFTLayer = function (tableId, GoogleAPIKey) {
         return new OpenLayers.Layer.Vector(
             "GFT", {
+                styleMap: defaultStyleMap,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
                 protocol: new OpenLayers.Protocol.Script({
@@ -555,6 +679,7 @@ if (window.Proj4js) {
     OL_HELPERS.createGMLLayer = function (url) {
 
         var gml = new OpenLayers.Layer.Vector("GML", {
+            styleMap: defaultStyleMap,
             strategies: [new OpenLayers.Strategy.Fixed()],
             protocol: new OpenLayers.Protocol.HTTP({
                 url: url,
@@ -683,7 +808,7 @@ if (window.Proj4js) {
                                     if (allSrs.indexOf("EPSG:4326") >= 0)
                                         srs = ol.proj.get("EPSG:4326")
                                     else {
-                                        for (var srsIdx in allSrs) {
+                                        for (var srsIdx = 0, length = allSrs.length; srsIdx < length; srsIdx++) {
                                             if (allSrs[srsIdx].match(/urn:ogc:def:crs:EPSG:.*:4326$/)) {
                                                 srs = ol.proj.get(allSrs[srsIdx])
                                                 break;
@@ -825,6 +950,7 @@ if (window.Proj4js) {
                                         }
 
                                         ftLayer = new OpenLayers.Layer.Vector('WFS', {
+                                            styleMap: defaultStyleMap,
                                             ftDescr: candidate,
                                             title: candidate.title,
                                             strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
@@ -840,7 +966,7 @@ if (window.Proj4js) {
                                         /* TODO_OL4 implement POST
                                         ftLayer = new OpenLayers.Layer.WFSLayer(
                                             candidate.name, {
-                                                style: default_style,
+                                                styleMap: defaultStyleMap,
                                                 ftDescr: candidate,
                                                 title: candidate.title,
                                                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
@@ -1076,6 +1202,7 @@ if (window.Proj4js) {
 
         var kml = new ol.layer.Vector({
             title: 'GeoJSON',
+            // styleMap: defaultStyleMap, // TODO_OL4
             source: new ol.source.Vector({
                 loader: function(extent, resolution, projection) {
                     // set source as loading before reading the KML
@@ -1098,6 +1225,7 @@ if (window.Proj4js) {
         var esrijson = new OpenLayers.Layer.Vector(
             "Esri GeoJSON",
             {
+                styleMap: defaultStyleMap,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
                 style: default_style,
@@ -1142,28 +1270,15 @@ if (window.Proj4js) {
 
     OL_HELPERS.createArcgisFeatureLayer = function (url, descriptor, visible) {
 
-        var context = {
-            getColor: function(feature) {
-                return (feature.data.RGB && "rgb("+feature.data.RGB+")") || "#ee9900"
-            }
-        };
-        var template = {
-            fillColor: "${getColor}", // using context.getColor(feature)
-            fillOpacity: 0.6,
-            strokeColor: "#404040",
-            strokeWidth: 0.5,
-            pointRadius: 5
-        };
-
-        var esrijson = new OpenLayers.Layer.Vector(
+        //TODO fetch layer descriptor to extract extent
+        var esrijson = new OpenLayers.Layer.ArcgisVectorLayer(
             descriptor.name,
             {
+                layerDescr: descriptor,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
                 visibility: visible,
-                styleMap: new OpenLayers.StyleMap({
-                    'default': new OpenLayers.Style(template, {context: context})
-                }),
+                styleMap: defaultStyleMap,
                 protocol: new OpenLayers.Protocol.Script({
                     url: url +   //build ArcGIS Server query string
                         "/query?dummy=1&" +
