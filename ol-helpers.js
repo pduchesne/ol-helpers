@@ -593,7 +593,7 @@ if (window.Proj4js) {
             // let's be lenient and look for latlonbbox or wgs84bbox regardless of advertised version
             var wgs84bbox = $featureType.find('WGS84BoundingBox')
             var latlonbbox = $featureType.find('LatLongBoundingBox')
-            if (wgs84bbox.length) {
+            if (wgs84bbox.length && wgs84bbox[0].children.length > 0) {
                 var ll = wgs84bbox.find('LowerCorner').text().split(' ');
                 var ur = wgs84bbox.find('UpperCorner').text().split(' ')
                 bbox = [ll[0], ll[1], ur[0], ur[1]]
