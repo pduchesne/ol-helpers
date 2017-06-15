@@ -815,16 +815,15 @@ OL_HELPERS.createKMLLayer = function (url) {
                                             }
                                         }
                                     }
+                                }
+                                if (!srs) {
+                                    // try current map projection
+                                    if (map && map.getView().getProjection() && allSrs.indexOf(map.getView().getProjection().getCode()) >= 0)
+                                        srs = map.getView().getProjection()
 
-                                    if (!srs) {
-                                        // try current map projection
-                                        if (map && map.getView().getProjection() && allSrs.indexOf(map.getView().getProjection().getCode()) >= 0)
-                                            srs = map.getView().getProjection()
-
-                                        // fallback on layer projection, if supported
-                                        else if (window.Proj4js && window.Proj4js.Proj(defaultSrs))
-                                            srs = ol.proj.get(defaultSrs)
-                                    }
+                                    // fallback on layer projection, if supported
+                                    else if (window.Proj4js && window.Proj4js.Proj(defaultSrs))
+                                        srs = ol.proj.get(defaultSrs)
                                 }
                                 if (!srs) {
                                     // no projection found --> try EPSG:4326 anyway, should be supported
