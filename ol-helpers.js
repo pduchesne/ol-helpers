@@ -18,6 +18,10 @@ if (window.Proj4js) {
     // definitions can be found at http://spatialreference.org/ref/epsg/{xxxx}/proj4js/
 
     proj4.defs['OGC:CRS84'] = proj4.defs['EPSG:4326']
+
+    // add EPSG:4326 as coming from GML, to allow for geometry transforms performed by format.GML
+    proj4.defs['http://www.opengis.net/gml/srs/epsg.xml#4326'] = proj4.defs['EPSG:4326']
+
     // warn : 31370 definition from spatialreference.org is wrong
     proj4.defs("EPSG:31370", "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.868628,52.297783,-103.723893,0.336570,-0.456955,1.842183,-1.2747 +units=m +no_defs");
     //window.Proj4js.defs["EPSG:31370"] = "+proj=lcc +lat_1=51.16666723333333 +lat_2=49.8333339 +lat_0=90 +lon_0=4.367486666666666 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.868628,52.297783,-103.723893,0.336570,-0.456955,1.842183,-1.2747 +units=m +no_defs";
@@ -26,6 +30,11 @@ if (window.Proj4js) {
     window.Proj4js.defs["EPSG:3812"] = "+proj=lcc +lat_1=49.83333333333334 +lat_2=51.16666666666666 +lat_0=50.797815 +lon_0=4.359215833333333 +x_0=649328 +y_0=665262 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
 
 }
+
+// redefine GML EPSG:4326 with lon/lat axis order;
+ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg.xml#4326', 'enu'));
+// redefining plain EPSG:4326 messes tiling in OL
+//ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326', 'enu'));
 
 (function() {
 
@@ -36,8 +45,9 @@ if (window.Proj4js) {
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
 
     var EPSG4326 = OL_HELPERS.EPSG4326 = ol.proj.get("EPSG:4326")
+    var EPSG4326_LONLAT = OL_HELPERS.EPSG4326_LONLAT = new ol.proj.EPSG4326_('EPSG:4326', 'enu')
     var Mercator = OL_HELPERS.Mercator = ol.proj.get("EPSG:3857")
-
+    var WORLD_BBOX = OL_HELPERS.WORLD_BBOX = [-180, -90, 180, 90]
     var MAX_FEATURES = 300
 
      /* TODO_OL4
@@ -271,144 +281,6 @@ if (window.Proj4js) {
     
      */
 
-
-    /* TODO_OL4 : custom layer switcher
-    OpenLayers.Control.HilatsLayerSwitcher = OpenLayers.Class(OpenLayers.Control.LayerSwitcher,
-        {
-
-            initialize: function(options) {
-                OpenLayers.Control.LayerSwitcher.prototype.initialize.apply(this, arguments)
-                this.baselayers = options.baselayers
-            },
-
-            redraw: function () {
-                var map = this.map
-
-                //if the state hasn't changed since last redraw, no need
-                // to do anything. Just return the existing div.
-                if (!this.checkRedraw()) {
-                    return this.div;
-                }
-
-                //clear out previous layers
-                this.clearLayersArray("base");
-                this.clearLayersArray("data");
-
-                var containsOverlays = false;
-                var containsBaseLayers = false;
-
-                // Save state -- for checking layer if the map state changed.
-                // We save this before redrawing, because in the process of redrawing
-                // we will trigger more visibility changes, and we want to not redraw
-                // and enter an infinite loop.
-                this.layerStates = this.map.layers.map(function (layer) {
-                    return {
-                        'name': layer.name,
-                        'visibility': layer.visibility,
-                        'inRange': layer.inRange,
-                        'id': layer.id
-                    };
-                })
-
-                var layers = this.map.layers.slice().filter(function (layer) {
-                    return layer.displayInLayerSwitcher
-                });
-                if (!this.ascending) {
-                    layers.reverse();
-                }
-
-                for (var i = 0; i < layers.length; i++) {
-                    var layer = layers[i];
-                    var baseLayer = layer.isBaseLayer;
-
-                    if (baseLayer) containsBaseLayers = true;
-                    else containsOverlays = true;
-
-                    // only check a baselayer if it is *the* baselayer, check data
-                    //  layers if they are visible
-                    var checked = (baseLayer) ? (layer == this.map.baseLayer) : layer.getVisibility();
-
-                    // create input element
-                    var inputElem = document.createElement("input"),
-                    // The input shall have an id attribute so we can use
-                    // labels to interact with them.
-                        inputId = OpenLayers.Util.createUniqueID(this.id + "_input_");
-
-                    inputElem.id = inputId;
-                    inputElem.name = (baseLayer) ? this.id + "_baseLayers" : layer.name;
-                    inputElem.type = (baseLayer) ? "radio" : "checkbox";
-                    inputElem.value = layer.name;
-                    inputElem.checked = checked;
-                    inputElem.defaultChecked = checked;
-                    inputElem.className = "olButton";
-                    inputElem._layer = layer.id;
-                    inputElem._layerSwitcher = this.id;
-                    inputElem.disabled = !baseLayer && !layer.inRange;
-
-                    // create span
-                    var labelSpan = document.createElement("label");
-                    // this isn't the DOM attribute 'for', but an arbitrary name we
-                    // use to find the appropriate input element in <onButtonClick>
-                    labelSpan["for"] = inputElem.id;
-                    OpenLayers.Element.addClass(labelSpan, "labelSpan olButton");
-                    labelSpan._layer = layer.id;
-                    labelSpan._layerSwitcher = this.id;
-                    if (!baseLayer && !layer.inRange) {
-                        labelSpan.style.color = "gray";
-                    }
-                    labelSpan.innerHTML = layer.title || layer.name;
-                    labelSpan.style.verticalAlign = (baseLayer) ? "bottom"
-                        : "baseline";
-
-
-                    var thisLayer = layer
-                    // snap to layer bbox action
-                    var gotoExtentButton =
-                        $("<span class='zoomToExtentIcon'>[]</span>")
-                            .click(function() {
-                                var bbox = thisLayer.getDataExtent() || thisLayer.getExtent()
-                                //var transformedBbox = bbox.clone().transform(layer.projection, map.getProjection())
-                                map.zoomToExtent(bbox)
-                            })
-
-
-                    var groupArray = (baseLayer) ? this.baseLayers
-                        : this.dataLayers;
-                    groupArray.push({
-                        'layer': layer,
-                        'inputElem': inputElem,
-                        'labelSpan': labelSpan
-                    });
-
-
-                    var groupDiv = $((baseLayer) ? this.baseLayersDiv
-                        : this.dataLayersDiv);
-                    var subDiv = $("<div></div>").appendTo(groupDiv)
-                    subDiv
-                            .append($(inputElem))
-                            .append($(labelSpan))
-                    if (!baseLayer) subDiv.append(gotoExtentButton)
-                }
-
-                // if no overlays, dont display the overlay label
-                this.dataLbl.style.display = (containsOverlays) ? "" : "none";
-
-                // if no baselayers, dont display the baselayer label
-                this.baseLbl.style.display = (containsBaseLayers) ? "" : "none";
-
-                // hide baselayers list if multiple basemaps config
-                if (this.baselayers && this.baselayers.length>1) {
-                    this.baseLbl.style.display = "none";
-                    this.baseLayersDiv.style.display = "none";
-                }
-
-                return this.div;
-            }
-        }
-    );
-
-    */
-
     /**
      * Parse a comma-separated set of KVP, typically for URL query or fragments
      * @param url
@@ -623,7 +495,7 @@ OL_HELPERS.createKMLLayer = function (url) {
         });
 
         // force pre-load of KML to init extent
-        kml.getSource().loadFeatures();
+        //kml.getSource().loadFeatures();
 
         return kml;
     }
@@ -721,9 +593,9 @@ OL_HELPERS.createKMLLayer = function (url) {
             if (wgs84bbox.length && wgs84bbox[0].children.length > 0) {
                 var ll = wgs84bbox.find('LowerCorner').text().split(' ');
                 var ur = wgs84bbox.find('UpperCorner').text().split(' ')
-                bbox = [ll[0], ll[1], ur[0], ur[1]]
+                bbox = [parseFloat(ll[0]), parseFloat(ll[1]), parseFloat(ur[0]), parseFloat(ur[1])]
             } else if (latlonbbox.length) {
-                bbox = [latlonbbox.attr('minx'), latlonbbox.attr('miny'), latlonbbox.attr('maxx'), latlonbbox.attr('maxy')]
+                bbox = [parseFloat(latlonbbox.attr('minx')), parseFloat(latlonbbox.attr('miny')), parseFloat(latlonbbox.attr('maxx')), parseFloat(latlonbbox.attr('maxy'))]
             }
 
             return {
@@ -815,15 +687,16 @@ OL_HELPERS.createKMLLayer = function (url) {
                                             }
                                         }
                                     }
-                                }
-                                if (!srs) {
-                                    // try current map projection
-                                    if (map && map.getView().getProjection() && allSrs.indexOf(map.getView().getProjection().getCode()) >= 0)
-                                        srs = map.getView().getProjection()
 
-                                    // fallback on layer projection, if supported
-                                    else if (window.Proj4js && window.Proj4js.Proj(defaultSrs))
-                                        srs = ol.proj.get(defaultSrs)
+                                    if (!srs) {
+                                        // look for current map projection in advertised projections
+                                        if (map && map.getView().getProjection() && allSrs.indexOf(map.getView().getProjection().getCode()) >= 0)
+                                            srs = map.getView().getProjection()
+
+                                        // fallback on layer projection, if supported
+                                        else if (window.Proj4js && window.Proj4js.Proj(defaultSrs))
+                                            srs = ol.proj.get(defaultSrs)
+                                    }
                                 }
                                 if (!srs) {
                                     // no projection found --> try EPSG:4326 anyway, should be supported
@@ -849,6 +722,7 @@ OL_HELPERS.createKMLLayer = function (url) {
                                         var format = new ol.format.WFS({
                                             //version: ver,
                                             url: url,
+                                            projection: srs,
                                             // If specifying featureType, it is mandatory to also specify featureNS
                                             // if not, OL will introspect and find all NS and feature types
                                             //featureType: candidate.name, /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
@@ -888,8 +762,9 @@ OL_HELPERS.createKMLLayer = function (url) {
                                                         }
                                                     ).then(
                                                         function(text) {
-                                                            var features = format.readFeatures(text)
-                                                            if (!isLatLon) {
+                                                            var features = format.readFeatures(text,  {featureProjection: mapProjection})
+                                                            /* This is no longer needed as GML EPSG:4326 axis order has been redefined
+                                                            if (!isLatLon && ol.proj.equivalent(srs, OL_HELPERS.EPSG4326)) {
                                                                 // OL3+ only supports xy. --> reverse axis order if not native latLon
                                                                 for (var i = 0; i < features.length; i++) {
                                                                     features[i].getGeometry().applyTransform(function (coords, coords2, stride) {
@@ -902,6 +777,7 @@ OL_HELPERS.createKMLLayer = function (url) {
                                                                     });
                                                                 }
                                                             }
+                                                            */
                                                             ftLayer
                                                                 .getSource()
                                                                 .addFeatures(features);
@@ -1188,10 +1064,14 @@ OL_HELPERS.createKMLLayer = function (url) {
 
     OL_HELPERS.createGeoJSONLayer = function (url) {
 
+        var geojsonFormat = new ol.format.GeoJSON({
+            defaultDataProjection: OL_HELPERS.EPSG4326
+        });
+
         // use a custom loader to set source state
-        var kmlLoader = ol.featureloader.loadFeaturesXhr(
+        var geojsonLoader = ol.featureloader.loadFeaturesXhr(
             url,
-            new ol.format.GeoJSON(),
+            geojsonFormat,
             function(features, dataProjection) {
                 this.addFeatures(features);
                 // set source as ready once features are loaded
@@ -1199,23 +1079,23 @@ OL_HELPERS.createKMLLayer = function (url) {
             },
             /* FIXME handle error */ ol.nullFunction);
 
-        var kml = new ol.layer.Vector({
+        var geojson = new ol.layer.Vector({
             title: 'GeoJSON',
             // styleMap: defaultStyleMap, // TODO_OL4
             source: new ol.source.Vector({
                 loader: function(extent, resolution, projection) {
-                    // set source as loading before reading the KML
+                    // set source as loading before reading the GeoJSON
                     this.setState(ol.source.State.LOADING);
-                    return kmlLoader.call(this, extent, resolution, projection)
-                }
-
+                    return geojsonLoader.call(this, extent, resolution, projection)
+                },
+                format: geojsonFormat
             })
         });
 
-        // force pre-load of KML to init extent
-        kml.getSource().loadFeatures();
+        // force pre-load of GeoJSON to init extent
+        //geojson.getSource().loadFeatures();
 
-        return kml;
+        return geojson;
     }
 
 
@@ -1457,13 +1337,12 @@ OL_HELPERS.createKMLLayer = function (url) {
                     title: mapConfig['layer'],
                     visible: true,
                     extent: mapConfig['extent'] && eval(mapConfig['extent']),  /* TODO_OL4 this correct to set maxExtent ? */
-                    // projection is set here as a hint for the basemap layer switcher
-                    projection: mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.Mercator,
                     source: new ol.source.TileWMS({
                         url: urls,
                         params: {layers: mapConfig['layer'],
                             TRANSPARENT: false,
-                            EXCEPTIONS: "INIMAGE"}
+                            EXCEPTIONS: "INIMAGE"},
+                        projection: mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.EPSG4326
                     })
                 })
             } else {
@@ -1472,14 +1351,13 @@ OL_HELPERS.createKMLLayer = function (url) {
                     title: mapConfig['layer'],
                     visible: true,
                     extent: mapConfig['extent'] && eval(mapConfig['extent']),  /* TODO_OL4 this correct to set maxExtent ? */
-                    // projection is set here as a hint for the basemap layer switcher
-                    projection: mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.Mercator,
                     source: new ol.source.ImageWMS({
                         url: urls,
                         params: {LAYERS: mapConfig['layer'],
                             TRANSPARENT: false,
                             EXCEPTIONS: "INIMAGE"},
-                        ratio : 1
+                        ratio : 1,
+                        projection: mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.EPSG4326,
                     })
                 })
             }
