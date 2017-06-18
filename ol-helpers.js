@@ -462,36 +462,40 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
         return result;
     };
 
-OL_HELPERS.createKMLLayer = function (url) {
+    OL_HELPERS.createKMLLayer = function (url) {
 
-    // use a custom loader to set source state
-    var kmlLoader = ol.featureloader.loadFeaturesXhr(
-        url,
-        new OL_HELPERS.format.KML({
-            onread: function(node) {
-                var nameNode = node.querySelector(":scope > name");
-                var name = nameNode && nameNode.textContent;
-                name && kml.set('title', name);
-            }
-        }),
-        function(features, dataProjection) {
-            this.addFeatures(features);
-            // set source as ready once features are loaded
-            this.setState(ol.source.State.READY);
-        },
-        /* FIXME handle error */ ol.nullFunction);
+        // use a custom loader to set source state
+        var kmlLoader = ol.featureloader.loadFeaturesXhr(
+            url,
+            new OL_HELPERS.format.KML({
+                onread: function(node) {
+                    var nameNode = node.querySelector(":scope > name");
+                    var name = nameNode && nameNode.textContent;
+                    name && kml.set('title', name);
+                }
+            }),
+            function(features, dataProjection) {
+                this.addFeatures(features);
+                // set source as ready once features are loaded
+                this.setState(ol.source.State.READY);
+                source.set('firstData', true)
+            },
+            /* FIXME handle error */ ol.nullFunction);
 
-    var kml = new ol.layer.Vector({
-        title: 'KML',
-        //styleMap: defaultStyleMap, // TODO_OL4
-        source: new ol.source.Vector({
+        var source = new ol.source.Vector({
             loader: function(extent, resolution, projection) {
                 // set source as loading before reading the KML
                 this.setState(ol.source.State.LOADING);
                 return kmlLoader.call(this, extent, resolution, projection)
             }
+        });
+        //set state as loading to be able to listen on load and grab extent after init
+        source.set('firstData', false)
 
-        })
+        var kml = new ol.layer.Vector({
+            title: 'KML',
+            //styleMap: defaultStyleMap, // TODO_OL4
+            source: source
         });
 
         // force pre-load of KML to init extent
@@ -1075,6 +1079,7 @@ OL_HELPERS.createKMLLayer = function (url) {
             function(features, dataProjection) {
                 this.addFeatures(features);
                 // set source as ready once features are loaded
+                source.set('firstData', true)
                 this.setState(ol.source.State.READY);
             },
             /* FIXME handle error */ ol.nullFunction);
@@ -1092,8 +1097,7 @@ OL_HELPERS.createKMLLayer = function (url) {
             })
         });
 
-        // force pre-load of GeoJSON to init extent
-        //geojson.getSource().loadFeatures();
+        source.set('firstData', false);
 
         return geojson;
     }
