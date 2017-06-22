@@ -3,9 +3,16 @@
 if (typeof proj4 != "undefined" && proj4) {
     window.Proj4js = {
         Proj: function (code) {
+
+            if (Proj4js.defs[code])
+                return proj4(Proj4js.defs[code]);
+
             var shortCode = code.replace(
                 /urn:ogc:def:crs:(\w+):(.*:)?(\w+)$/, "$1:$3"
             )
+            // side-effect : add long-form code as alias
+            if (code != shortCode)
+                Proj4js.defs(code, Proj4js.defs[shortCode]);
             return Proj4js.defs[shortCode] && proj4(Proj4js.defs[shortCode]);
         },
         defs: proj4.defs,
@@ -32,9 +39,11 @@ if (window.Proj4js) {
 }
 
 // redefine GML EPSG:4326 with lon/lat axis order;
-ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg.xml#4326', 'enu'));
-// redefining plain EPSG:4326 messes tiling in OL
-//ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326', 'enu'));
+// Don't do that. Force usage of EPSG4326_LONLAT in format.GML instead
+//ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg.xml#4326', 'enu'));
+
+// Define a special projection with lon/lat axis order to be used in format.GML hack
+ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
 
 (function() {
 
@@ -45,6 +54,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
 
     var EPSG4326 = OL_HELPERS.EPSG4326 = ol.proj.get("EPSG:4326")
+    var EPSG4326_LONG = OL_HELPERS.EPSG4326_LONG = ol.proj.get('urn:ogc:def:crs:EPSG:6.6:4326')
     var EPSG4326_LONLAT = OL_HELPERS.EPSG4326_LONLAT = new ol.proj.EPSG4326_('EPSG:4326', 'enu')
     var Mercator = OL_HELPERS.Mercator = ol.proj.get("EPSG:3857")
     var WORLD_BBOX = OL_HELPERS.WORLD_BBOX = [-180, -90, 180, 90]
@@ -281,6 +291,86 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
     
      */
 
+    var pendingEPSGRequests = {};
+    var searchEPSG = function(query) {
+        if (pendingEPSGRequests[query])
+            return pendingEPSGRequests[query];
+
+        var deferredResult = pendingEPSGRequests[query] = $.Deferred()
+
+        fetch('https://epsg.io/?format=json&q=' + query).then(function(response) {
+            return response.json();
+        }).then(function(json) {
+            var results = json['results'];
+            if (results && results.length > 0) {
+                for (var i = 0, ii = results.length; i < ii; i++) {
+                    var result = results[i];
+                    if (result) {
+                        var code = result['code'], name = result['name'],
+                            proj4def = result['proj4'], bbox = result['bbox'];
+                        if (code && code.length > 0 && proj4def && proj4def.length > 0) {
+
+                            var newProjCode = 'EPSG:' + code;
+                            proj4.defs(newProjCode, proj4def);
+                            var newProj = ol.proj.get(newProjCode);
+
+                            deferredResult.resolve(newProj);
+                        }
+                    }
+                }
+            }
+            deferredResult.resolve(undefined); // resolve with an error ?
+        });
+
+        return deferredResult.then(function() {
+            delete pendingEPSGRequests[query]
+        });
+    }
+
+    OL_HELPERS.LoggingMap = function(options) {
+        ol.Map.call(this, options);
+
+        this.loadingObjects = []
+
+        this.loadingDiv = options.loadingDiv
+        if (!this.loadingDiv) {
+            this.loadingDiv = $("<div style='z-index: 3000; position: absolute; top: 0px;'></div>").text("Loading...")[0]
+        }
+
+        this.getViewport().appendChild(this.loadingDiv);
+    };
+    ol.inherits(OL_HELPERS.LoggingMap, ol.Map);
+
+    OL_HELPERS.LoggingMap.prototype.updateLoadingStatus = function() {
+        if (this.loadingObjects.length == 0) {
+            this.loadingDiv.style.display = 'none'
+        } else {
+            this.loadingDiv.style.display = ''
+        }
+    };
+
+    OL_HELPERS.LoggingMap.prototype.addLayer = function(layer) {
+        ol.Map.prototype.addLayer.apply(this, arguments)
+
+        var _this = this
+
+        layer.getSource().on('change', function(e) {
+            if (layer.getSource().getState() == 'loading') {
+                if (_this.loadingObjects.indexOf(this) < 0) {
+                    _this.loadingObjects.push(this)
+                }
+            } else if (layer.getSource().getState() == 'ready') {
+                var idx = _this.loadingObjects.indexOf(this)
+                if (idx >= 0) {
+                    _this.loadingObjects.splice(idx, 1)
+                }
+            }
+
+            _this.updateLoadingStatus()
+        });
+
+    };
+
     /**
      * Parse a comma-separated set of KVP, typically for URL query or fragments
      * @param url
@@ -478,7 +568,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
                 this.addFeatures(features);
                 // set source as ready once features are loaded
                 this.setState(ol.source.State.READY);
-                source.set('firstData', true)
+                source.set('waitingOnFirstData', false)
             },
             /* FIXME handle error */ ol.nullFunction);
 
@@ -490,7 +580,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
             }
         });
         //set state as loading to be able to listen on load and grab extent after init
-        source.set('firstData', false)
+        source.set('waitingOnFirstData', true)
 
         var kml = new ol.layer.Vector({
             title: 'KML',
@@ -634,6 +724,20 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
     }
 
 
+    /*
+    Known problematic WFS :
+        - https://hazards.fema.gov/gis/nfhl/services/public/NFHL/MapServer/WFSServer
+            default SRS is 4269, defined with axis order enu
+            1. axis order is wrong with
+                - (ver=undefined || ver=2.0) && outputformat=GML3
+                - ver=1.1.0 && (outputformat==undefined || outputformat=GML3)
+            2. GML uses gml:member
+                - ver=undefined (defaults to 2.0) && outputformat=undefined
+            3. GML advertises 3.2 namespace even if requesting GML2 if
+                - ver=undefined && outputformat=GML2
+     */
+
+
     OL_HELPERS.withFeatureTypesLayers = function (url, layerProcessor, ftName, map, useGET) {
 
         var deferredResult = $.Deferred()
@@ -646,6 +750,9 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
                 var ver = capas.version
                 if (ver == "2.0.0")
                     ver = "1.1.0"  // 2.0.0 causes failures in some cases (e.g. Geoserver TOPP States WFS)
+
+                // force GML version to 2.0; GML3 introduces variations in axis order depending on implementations
+                var gmlFormatVersion = "GML2";
 
                 var candidates = capas.featureTypes
                 if (ftName) candidates = capas.featureTypes.filter(function (ft) {
@@ -670,15 +777,13 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
                             if (featureTypeProperties.length) {
 
                                 var srs;
-                                var isLatLon = false;
 
-                                // support DefaultCRS for WFS 2.0
                                 var defaultSrs = candidate.defaultSrs
-
                                 var altSrs = candidate.otherSrs
-                                if (defaultSrs) { // sometimes no default srs is found (misusage of DefaultSRS in 2.0 version, ...)
+                                // all SRSs with default at idx 0
+                                var allSrs = (defaultSrs?[defaultSrs]:[]).concat(altSrs || [])
 
-                                    var allSrs = (altSrs || []).concat([defaultSrs])
+                                if (allSrs.length > 0) { // sometimes no srs is found (misusage of DefaultSRS in 2.0 version, ...)
 
                                     // first look for 4326 projection
                                     if (allSrs.indexOf("EPSG:4326") >= 0)
@@ -698,182 +803,247 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
                                             srs = map.getView().getProjection()
 
                                         // fallback on layer projection, if supported
-                                        else if (window.Proj4js && window.Proj4js.Proj(defaultSrs))
-                                            srs = ol.proj.get(defaultSrs)
+                                        else if (window.Proj4js && window.Proj4js.Proj(allSrs[0]))
+                                            srs = ol.proj.get(allSrs[0])
+                                        else {
+                                            srs = searchEPSG(allSrs[0].split(':').pop())
+                                        }
                                     }
                                 }
-                                if (!srs) {
-                                    // no projection found --> try EPSG:4326 anyway, should be supported
-                                    srs = ol.proj.get("EPSG:4326")
+
+                                if (! (srs && srs.promise)) {
+                                    // let's turn this into a promise
+                                    srs = $.Deferred().resolve(srs)
                                 }
 
-                                if (srs.toString().match(/urn:ogc:def:crs:EPSG:.*:4326$/) ||
-                                    srs.getCode().startsWith("urn:ogc:def:crs:") && srs.getUnits() == "degrees") {
-                                    isLatLon = true // using long form SRS, assume it is lat/lon axis order
-                                }
+                                srs.then(function(resolvedSrs) {
+
+                                    if (!resolvedSrs) {
+                                        // no projection found --> try EPSG:4326 anyway, should be supported
+                                        resolvedSrs = ol.proj.get("EPSG:4326")
+                                    }
+
+                                    var isLonLat4326 = ol.proj.equivalent(resolvedSrs, OL_HELPERS.EPSG4326);
+                                    if (ver!="1.0.0" && resolvedSrs.toString().match(/urn:ogc:def:crs:EPSG:.*:4326$/) ||
+                                        resolvedSrs.getCode().startsWith("urn:ogc:def:crs:") && resolvedSrs.getUnits() == "degrees") {
+                                        // using long form SRS, assume it is lat/lon axis order
+                                        isLonLat4326 = false
+                                    }
+
+                                    var geomProps = featureTypeProperties.filter(function (prop, idx) {
+                                        return prop.type && prop.type.startsWith("gml");
+                                    })
+
+                                    // ignore feature types with no gml prop. Correct ?
+                                    if (geomProps && geomProps.length > 0) {
+
+                                        if (useGET) {
+
+                                            var gmlFormat = gmlFormatVersion == 'GML2' ? new ol.format.GML2() : new ol.format.GML3();
+
+                                            if (gmlFormatVersion == 'GML2' && isLonLat4326) {
+                                                // Overload parseCoordinates method to force lon/lat parsing
+
+                                                /*
+                                                var originalMethod = gmlFormat.readFlatCoordinatesFromNode_;
+                                                gmlFormat.readFlatCoordinatesFromNode_ = function(node, objectStack) {
+                                                    // use special lon/lat projection defined above
+                                                    objectStack[0]['srsName'] = 'EPSG:4326:LONLAT';
+                                                    return originalMethod.call(this, node, objectStack);
+                                                }
+                                                */
 
 
+                                                gmlFormat.readGeometryElement = function(node, objectStack) {
+                                                    var context = (objectStack[0]);
+                                                    if (node.firstElementChild.getAttribute('srsName') == 'http://www.opengis.net/gml/srs/epsg.xml#4326')
+                                                        context['srsName'] = 'EPSG:4326:LONLAT';
 
-                                var geomProps = featureTypeProperties.filter(function (prop, idx) {
-                                    return prop.type && prop.type.startsWith("gml");
-                                })
-
-                                // ignore feature types with no gml prop. Correct ?
-                                if (geomProps && geomProps.length > 0) {
-
-                                    if (useGET) {
-
-                                        var format = new ol.format.WFS({
-                                            //version: ver,
-                                            url: url,
-                                            projection: srs,
-                                            // If specifying featureType, it is mandatory to also specify featureNS
-                                            // if not, OL will introspect and find all NS and feature types
-                                            //featureType: candidate.name, /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
-                                            //featureNS: candidate.featureNS,
-
-                                            //gmlFormat: new ol.format.GML2()
-
-                                            /* TODO_OL4 can we ignore the geometryName and leave it up to OL ? */
-                                            //geometryName: $(geomProps[0]).attr('name')
-                                        })
-                                        ftLayer = new ol.layer.Vector({
-                                            title: candidate.title,
-                                            source: new ol.source.Vector({
-                                                loader: function(extent, resolution, mapProjection) {
-
-                                                    var params = {
-                                                        service: 'WFS',
-                                                        version: ver,
-                                                        request: 'GetFeature',
-                                                        maxFeatures: MAX_FEATURES,
-                                                        typename: candidate.name, /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
-                                                        srsname: srs.getCode(),
-                                                        /* explicit SRS must be provided here, as some impl (geoserver)
-                                                           take lat/lon axis order by default.
-                                                           EPSG:4326 enforces lon/lat order */
-                                                        /* TODO_OL4 check if map proj is compatible with WFS
-                                                           some versions/impls need always 4326 bbox
-                                                           do on-the-fly reprojection if needed */
-                                                        bbox: extent.join(',') + ','+mapProjection.getCode()
+                                                    var geometry = ol.xml.pushParseAndPop(null,
+                                                        this.GEOMETRY_PARSERS_, node, objectStack, this);
+                                                    if (geometry) {
+                                                        return ol.format.Feature.transformWithOptions(geometry, false, context);
+                                                    } else {
+                                                        return undefined;
                                                     }
+                                                };
 
-                                                    fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
-                                                        {method:'GET'}
-                                                    ).then(
-                                                        function(response) {
-                                                            return response.text();
-                                                        }
-                                                    ).then(
-                                                        function(text) {
-                                                            var features = format.readFeatures(text,  {featureProjection: mapProjection})
-                                                            /* This is no longer needed as GML EPSG:4326 axis order has been redefined
-                                                            if (!isLatLon && ol.proj.equivalent(srs, OL_HELPERS.EPSG4326)) {
-                                                                // OL3+ only supports xy. --> reverse axis order if not native latLon
-                                                                for (var i = 0; i < features.length; i++) {
-                                                                    features[i].getGeometry().applyTransform(function (coords, coords2, stride) {
-                                                                        for (var j = 0; j < coords.length; j += stride) {
-                                                                            var y = coords[j];
-                                                                            var x = coords[j + 1];
-                                                                            coords[j] = x;
-                                                                            coords[j + 1] = y;
-                                                                        }
-                                                                    });
-                                                                }
+                                            }
+
+                                            var format = new ol.format.WFS({
+                                                //version: ver,
+                                                url: url,
+                                                projection: isLonLat4326?OL_HELPERS.EPSG4326_LONLAT:resolvedSrs,
+                                                // If specifying featureType, it is mandatory to also specify featureNS
+                                                // if not, OL will introspect and find all NS and feature types
+                                                //featureType: candidate.name, /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                                                //featureNS: candidate.featureNS,
+
+                                                gmlFormat: gmlFormat
+
+                                                /* TODO_OL4 can we ignore the geometryName and leave it up to OL ? */
+                                                //geometryName: $(geomProps[0]).attr('name')
+                                            })
+                                            ftLayer = new ol.layer.Vector({
+                                                title: candidate.title,
+                                                source: new ol.source.Vector({
+                                                    loader: function(extent, resolution, mapProjection) {
+
+                                                        var bbox;
+                                                        if (ver != '1.0.0') {
+                                                            // let's set the bbox srs explicitly to avoid default behaviours among server impls
+
+                                                            if (ol.proj.equivalent(mapProjection, OL_HELPERS.EPSG4326)
+                                                                // apparently 4326 extents from map.view are always in lon/lat already
+                                                                //&& mapProjection.getAxisOrientation() == 'enu'
+                                                                ) {
+                                                                // the current bbox is expressed in lon/lat --> flip axis
+                                                                extent = [extent[1], extent[0], extent[3], extent[2]];
+
+                                                                bbox = extent.join(',') + ','+ OL_HELPERS.EPSG4326_LONG.getCode()
+                                                            } else {
+                                                                bbox = extent.join(',') + ','+ mapProjection.getCode()
                                                             }
-                                                            */
-                                                            ftLayer
-                                                                .getSource()
-                                                                .addFeatures(features);
+                                                        } else {
+                                                            bbox = extent.join(',')
                                                         }
-                                                    ).catch(function(ex) {
-                                                            console.warn("GetFeatures failed");
-                                                            console.warn(ex);
-                                                        })
+
+                                                        var params = {
+                                                            service: 'WFS',
+                                                            version: ver,
+                                                            request: 'GetFeature',
+                                                            maxFeatures: MAX_FEATURES,
+                                                            typename: candidate.name, /* TODO_OL4 deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                                                            srsname: resolvedSrs.getCode(),
+                                                            /* explicit SRS must be provided here, as some impl (geoserver)
+                                                               take lat/lon axis order by default.
+                                                               EPSG:4326 enforces lon/lat order */
+                                                            /* TODO_OL4 check if map proj is compatible with WFS
+                                                               some versions/impls need always 4326 bbox
+                                                               do on-the-fly reprojection if needed */
+                                                            bbox: bbox,
+                                                            // some WFS have wrong axis order if GML3
+                                                            outputFormat: gmlFormatVersion
+                                                        }
+
+                                                        fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
+                                                            {method:'GET'}
+                                                        ).then(
+                                                            function(response) {
+                                                                return response.text();
+                                                            }
+                                                        ).then(
+                                                            function(text) {
+                                                                var features = format.readFeatures(text,  {featureProjection: mapProjection, dataProjection: resolvedSrs})
+                                                                /* This is no longer needed as axis order is forced to lon/lat in format.GML
+                                                                if (!isLatLon && ol.proj.equivalent(resolvedSrs, OL_HELPERS.EPSG4326)) {
+                                                                    // OL3+ only supports xy. --> reverse axis order if not native latLon
+                                                                    for (var i = 0; i < features.length; i++) {
+                                                                        features[i].getGeometry().applyTransform(function (coords, coords2, stride) {
+                                                                            for (var j = 0; j < coords.length; j += stride) {
+                                                                                var y = coords[j];
+                                                                                var x = coords[j + 1];
+                                                                                coords[j] = x;
+                                                                                coords[j + 1] = y;
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                }
+                                                                */
+                                                                ftLayer
+                                                                    .getSource()
+                                                                    .addFeatures(features);
+                                                            }
+                                                        ).catch(function(ex) {
+                                                                console.warn("GetFeatures failed");
+                                                                console.warn(ex);
+                                                            })
+                                                    },
+                                                    strategy: ol.loadingstrategy.bbox,
+                                                    projection: resolvedSrs // is this needed ?
+                                                    //maxExtent:
+                                                }),
+                                                visible: idx == 0
+                                            });
+                                            // override getExtent to take advertised bbox into account first
+                                            ftLayer.getSource().set('ftDescr',candidate);
+                                            ftLayer.getSource().getFullExtent = getFTSourceExtent;
+
+
+                                             /* TODO_OL4 : still to integrate : BBOXWithMax
+
+                                            var wfs_options = {
+                                                url: url,
+                                                //headers : {"Content-Type": "application/xml"},
+                                                params: {
+                                                    request: "GetFeature",
+                                                    service: "WFS",
+                                                    version: ver,
+                                                    typeName: candidate.prefixedName || candidate.name,
+                                                    maxFeatures: MAX_FEATURES,
+                                                    srsName: resolvedSrs,
+                                                    // TODO check capabilities for supported outputFormats
+                                                    //      some impls expose a long-form expression of GML2/3
+                                                    //outputFormat: "GML2"
                                                 },
-                                                strategy: ol.loadingstrategy.bbox,
-                                                projection: srs
-                                                //maxExtent:
-                                            }),
-                                            visible: idx == 0
-                                        });
-                                        // override getExtent to take advertised bbox into account first
-                                        ftLayer.getSource().set('ftDescr',candidate);
-                                        ftLayer.getSource().getFullExtent = getFTSourceExtent;
+                                                format: new OpenLayers.Format.GML({
+                                                    featureNS: candidate.featureNS,
+                                                    geometryName: $(geomProps[0]).attr('name')
+                                                }),
+                                                formatOptions : {
+                                                    xy: !isLatLon
+                                                },
+                                                srsInBBOX : true
+                                            }
 
-
-                                         /* TODO_OL4 : still to integrate : BBOXWithMax
-
-                                        var wfs_options = {
-                                            url: url,
-                                            //headers : {"Content-Type": "application/xml"},
-                                            params: {
-                                                request: "GetFeature",
-                                                service: "WFS",
-                                                version: ver,
-                                                typeName: candidate.prefixedName || candidate.name,
-                                                maxFeatures: MAX_FEATURES,
-                                                srsName: srs,
-                                                // TODO check capabilities for supported outputFormats
-                                                //      some impls expose a long-form expression of GML2/3
-                                                //outputFormat: "GML2"
-                                            },
-                                            format: new OpenLayers.Format.GML({
-                                                featureNS: candidate.featureNS,
-                                                geometryName: $(geomProps[0]).attr('name')
-                                            }),
-                                            formatOptions : {
-                                                xy: !isLatLon
-                                            },
-                                            srsInBBOX : true
-                                        }
-
-                                        ftLayer = new OpenLayers.Layer.Vector('WFS', {
-                                            styleMap: defaultStyleMap,
-                                            ftDescr: candidate,
-                                            title: candidate.title,
-                                            strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                                            projection: srs,
-                                            visibility: idx == 0,
-                                            protocol: new OpenLayers.Protocol.HTTP(wfs_options)
-                                        });
-                                        ftLayer.getDataExtent = OpenLayers.Layer.WFSLayer.prototype.getDataExtent
-
-                                        */
-                                    } else {
-
-                                        /* TODO_OL4 implement POST
-                                        ftLayer = new OpenLayers.Layer.WFSLayer(
-                                            candidate.name, {
+                                            ftLayer = new OpenLayers.Layer.Vector('WFS', {
                                                 styleMap: defaultStyleMap,
                                                 ftDescr: candidate,
                                                 title: candidate.title,
                                                 strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                                                projection: srs,
+                                                projection: resolvedSrs,
                                                 visibility: idx == 0,
-                                                protocol: new OpenLayers.Protocol.WFS({
-                                                    //headers: {"Content-Type": "application/xml; charset=UTF-8"}, // (failed) attempt at dealing with accentuated chars in some feature types
-                                                    version: ver,
-                                                    url: url,
-                                                    featureType: candidate.name,
-                                                    srsName: srs,
-                                                    //featurePrefix: descr.targetPrefix,
-                                                    featureNS: descr.targetNamespace,
-                                                    maxFeatures: MAX_FEATURES,
-                                                    formatOptions : {
-                                                        xy: !isLatLon
-                                                    },
-                                                    geometryName: $(geomProps[0]).attr('name'),
-                                                    //outputFormat: "GML2"  // enforce GML2, as GML3 uses lat/long axis order and discrepancies may exists between implementations (to be verified)
-                                                })
-                                            })
-                                            */
+                                                protocol: new OpenLayers.Protocol.HTTP(wfs_options)
+                                            });
+                                            ftLayer.getDataExtent = OpenLayers.Layer.WFSLayer.prototype.getDataExtent
 
-                                        throw "Not Implemented";
+                                            */
+                                        } else {
+
+                                            /* TODO_OL4 implement POST
+                                            ftLayer = new OpenLayers.Layer.WFSLayer(
+                                                candidate.name, {
+                                                    styleMap: defaultStyleMap,
+                                                    ftDescr: candidate,
+                                                    title: candidate.title,
+                                                    strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
+                                                    projection: resolvedSrs,
+                                                    visibility: idx == 0,
+                                                    protocol: new OpenLayers.Protocol.WFS({
+                                                        //headers: {"Content-Type": "application/xml; charset=UTF-8"}, // (failed) attempt at dealing with accentuated chars in some feature types
+                                                        version: ver,
+                                                        url: url,
+                                                        featureType: candidate.name,
+                                                        srsName: resolvedSrs,
+                                                        //featurePrefix: descr.targetPrefix,
+                                                        featureNS: descr.targetNamespace,
+                                                        maxFeatures: MAX_FEATURES,
+                                                        formatOptions : {
+                                                            xy: !isLatLon
+                                                        },
+                                                        geometryName: $(geomProps[0]).attr('name'),
+                                                        //outputFormat: "GML2"  // enforce GML2, as GML3 uses lat/long axis order and discrepancies may exists between implementations (to be verified)
+                                                    })
+                                                })
+                                                */
+
+                                            throw "Not Implemented";
+                                        }
+
+                                        layerProcessor(ftLayer)
                                     }
 
-                                    layerProcessor(ftLayer)
-                                }
+                                })
                             }
 
                             deferredLayer.resolve(ftLayer)
@@ -1079,7 +1249,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
             function(features, dataProjection) {
                 this.addFeatures(features);
                 // set source as ready once features are loaded
-                source.set('firstData', true)
+                geojson.getSource().set('waitingOnFirstData', false)
                 this.setState(ol.source.State.READY);
             },
             /* FIXME handle error */ ol.nullFunction);
@@ -1097,7 +1267,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('http://www.opengis.net/gml/srs/epsg
             })
         });
 
-        source.set('firstData', false);
+        geojson.getSource().set('waitingOnFirstData', true);
 
         return geojson;
     }
