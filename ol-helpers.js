@@ -90,30 +90,6 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
         stroke: stroke
     })
 
-    /* TODO_OL4
-    var originalXHR = OpenLayers.Request.XMLHttpRequest
-    OpenLayers.Request.XMLHttpRequest = function () {
-        var newXHR = new originalXHR()
-
-        // [taken from @letmaik patch on ckanext-geoview]
-        // monkey-patch OL2 to get CORS working properly
-        // see https://github.com/ckan/ckanext-geoview/issues/28
-        var oldSRH = newXHR.setRequestHeader
-        newXHR.setRequestHeader = function (sName, sValue) {
-            if (sName === 'X-Requested-With') return;
-            oldSRH.call(newXHR, sName, sValue)
-        }
-
-        // override the XMLHttpRequest to enforce UTF-8 decoding
-        // because some WFS respond with UTF-8 answers while advertising ISO encoding in the headers
-        if (newXHR._object && newXHR._object.overrideMimeType) newXHR._object.overrideMimeType('text/xml; charset=UTF-8')
-        return newXHR
-    }
-    $_.each(Object.keys(originalXHR), function (key) {
-        OpenLayers.Request.XMLHttpRequest[key] = originalXHR[key]
-    })
-    */
-
     /* TODO_OL4 : ol.strategy.bbox is now a plain function
     OpenLayers.Strategy.BBOXWithMax = OpenLayers.Class(OpenLayers.Strategy.BBOX, {
         update: function (options) {
