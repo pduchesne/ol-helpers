@@ -90,6 +90,79 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
         stroke: stroke
     })
 
+
+
+    var isNumeric = function(n) {
+        return !isNaN(parseFloat(n)) && isFinite(n);
+    }
+
+    ol.Map.prototype.addLayerWithExtent = function (layer) {
+        this.addLayer(layer)
+
+        // fit to layer extent only if layer visible
+        if (layer.getVisible() && layer.getSource()) {
+
+            var _view = this.getView();
+            var zoomToExtent = function() {
+                var projectedBbox;
+                var wgs84bbox = layer.getSource().getFullExtent && layer.getSource().getFullExtent();
+                if (wgs84bbox) {
+                    projectedBbox = ol.proj.transformExtent(wgs84bbox, OL_HELPERS.EPSG4326, _view.getProjection())
+                } else {
+                    // is getExtent always in view projection? yes for vector sources
+                    projectedBbox = layer.getSource().getExtent && layer.getSource().getExtent();
+                }
+
+                if (isNumeric(projectedBbox[0]) &&
+                    isNumeric(projectedBbox[1]) &&
+                    isNumeric(projectedBbox[2]) &&
+                    isNumeric(projectedBbox[3]))
+                /* TODO_OL4 if map already has a set extent, extend it to fit, rather than set it ? */
+                    _view.fit(projectedBbox, {constrainResolution: false})
+                else {
+                    console.warn("Adding layer : could not find extent to zoom to")
+                    /* TODO_OL4 still needed ?
+                     var firstExtent = false
+                     var _this = this
+                     layer.events.register(
+                     "loadend",
+                     layer,
+                     function (e) {
+                     if (!firstExtent) {
+                     var bbox = e && e.object && e.object.getDataExtent && e.object.getDataExtent()
+                     if (bbox)
+                     if (_this.getExtent()) this.getExtent().extend(bbox)
+                     else _this.zoomToExtent(bbox)
+                     else
+                     _this.zoomToMaxExtent()
+                     firstExtent = true
+                     }
+                     })
+                     */
+                }
+            }
+
+
+            var loading = $.Deferred();
+            if (! layer.getSource().get('waitingOnFirstData'))
+                loading.resolve();
+            else {
+                var listenerKey = layer.getSource().on('change', function(e) {
+                    if (layer.getSource().getState() == 'ready') {
+                        ol.Observable.unByKey(listenerKey);
+                        loading.resolve();
+                    }
+                });
+            }
+
+            loading.then(zoomToExtent)
+
+        }
+
+    }
+
+
+
     /* TODO_OL4 : ol.strategy.bbox is now a plain function
     OpenLayers.Strategy.BBOXWithMax = OpenLayers.Class(OpenLayers.Strategy.BBOX, {
         update: function (options) {
@@ -136,136 +209,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
             }
         }
     )
-
-    OpenLayers.Layer.WFSLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
-        {
-            getDataExtent: function () {
-                var bbox = this.ftDescr &&
-                    (this.ftDescr.bounds || // WFS 1.1+
-                        (this.ftDescr.latLongBoundingBox && new OpenLayers.Bounds(this.ftDescr.latLongBoundingBox))) // WFS 1.0
-                return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.Vector.prototype.getDataExtent.apply(this, arguments)
-            }
-        }
-    )
-
-    OpenLayers.Layer.WMSLayer = OpenLayers.Class(OpenLayers.Layer.WMS,
-        {
-            getDataExtent: function () {
-                return (this.mlDescr &&
-                    this.mlDescr.llbbox &&
-                    new OpenLayers.Bounds(this.mlDescr.llbbox).clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.WMS.prototype.getDataExtent.apply(this, arguments)
-            }
-        }
-    )
-
-    OpenLayers.Layer.WMTSLayer = OpenLayers.Class(OpenLayers.Layer.WMTS,
-        {
-            getDataExtent: function () {
-                return (this.mlDescr &&
-                    this.mlDescr.bounds &&
-                    this.mlDescr.bounds.clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.WMTS.prototype.getDataExtent.apply(this, arguments)
-            }
-        }
-    )
     */
-
-
-    /* TODO_OL4 impleemnt LoggingMap
-     OpenLayers.LoggingMap = OpenLayers.Class(OpenLayers.Map,
-     {
-     initialize: function(options) {
-     OpenLayers.Map.prototype.initialize.apply(this, arguments)
-     this.loadingObjects = []
-
-     this.loadingDiv = options.loadingDiv
-     if (!this.loadingDiv) {
-     this.loadingDiv = OpenLayers.Util.createDiv()
-     this.loadingDiv.textContent = "Loading..."
-     this.loadingDiv.style.zIndex = 3000
-     }
-
-     this.viewPortDiv.appendChild(this.loadingDiv);
-     },
-
-     updateLoadingStatus: function() {
-     if (this.loadingObjects.length == 0) {
-     this.loadingDiv.style.display = 'none'
-     } else {
-     this.loadingDiv.style.display = ''
-     }
-     },
-
-     addLayer: function(layer) {
-     OpenLayers.Map.prototype.addLayer.apply(this, arguments)
-
-     var _this = this
-
-     layer.events.register("loadstart", layer, function() {
-     if (_this.loadingObjects.indexOf(this) >= 0) {
-     console.log("Layer starts twice : "+this.id)
-     } else {
-     _this.loadingObjects.push(this)
-     }
-     _this.updateLoadingStatus()
-     });
-
-     layer.events.register("loadend", layer, function() {
-     var idx = _this.loadingObjects.indexOf(this)
-     if (idx >= 0) {
-     _this.loadingObjects.splice(idx, 1)
-     }
-
-     _this.updateLoadingStatus()
-     });
-
-     layer.events.register("loaderror", layer, function(evt) {
-     var idx = _this.loadingObjects.indexOf(this)
-     if (idx >= 0) {
-     _this.loadingObjects.splice(idx, 1)
-     }
-
-     _this.updateLoadingStatus()
-
-     console.warn("Layer fails top load :"+evt)
-     });
-
-     layer.events.register("tileloadstart", layer, function(evt) {
-     if (_this.loadingObjects.indexOf(evt.tile) >= 0) {
-     console.log("Tile starts twice : "+evt.tile.id)
-     } else {
-     _this.loadingObjects.push(evt.tile)
-     }
-     _this.updateLoadingStatus()
-     });
-
-     layer.events.register("tileloaded", layer, function(evt) {
-     var idx = _this.loadingObjects.indexOf(evt.tile)
-     if (idx >= 0) {
-     _this.loadingObjects.splice(idx, 1)
-     }
-
-     _this.updateLoadingStatus()
-     });
-
-     layer.events.register("tileerror", layer, function(evt) {
-     var idx = _this.loadingObjects.indexOf(evt.tile)
-     if (idx >= 0) {
-     _this.loadingObjects.splice(idx, 1)
-     }
-
-     _this.updateLoadingStatus()
-
-     console.warn("Tile fails top load :"+evt)
-     });
-     }
-
-     }
-     )
-    
-     */
 
     var pendingEPSGRequests = {};
     var searchEPSG = function(query) {
@@ -591,9 +535,6 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
             //styleMap: defaultStyleMap, // TODO_OL4
             source: source
         });
-
-        // force pre-load of KML to init extent
-        //kml.getSource().loadFeatures();
 
         return kml;
     }
