@@ -319,6 +319,69 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
 
     };
 
+
+
+    OL_HELPERS.FeatureInfoOverlay = function(options) {
+        ol.Overlay.call(this, options);
+        this.hoveredFeatures = [];
+    };
+    ol.inherits(OL_HELPERS.FeatureInfoOverlay, ol.Overlay);
+    OL_HELPERS.FeatureInfoOverlay.prototype.setFeatures = function(features) {
+        if (features.length == 0) {
+            this.setPosition(undefined);
+            return;
+        }
+
+        var feature = features[0]; // TODO_OL4 support multiple features
+        var htmlContent = "<div class='name'>" + feature.get('name') + "</div>";
+        htmlContent += "<div class='id'>" + feature.get('layer').get('title') +" : "+ feature.getId() + "</div>";
+        /*
+         htmlContent += "<table>";
+         feature.getKeys().forEach(function(prop) {
+         htmlContent += "<tr><td>" + prop + "</td><td>" + feature.get(prop) + "</td></tr></div>"
+         })
+         htmlContent += "</table>"
+         */
+
+
+        $(this.getElement()).find('.popupContent').html(htmlContent);
+    }
+    OL_HELPERS.FeatureInfoOverlay.prototype.handleMapChanged = function() {
+        ol.Overlay.prototype.handleMapChanged.call(this);
+
+        var map = this.getMap();
+        var _this = this;
+        if (map) {
+            map.on('pointermove', function(evt) {
+                var changed = false;
+                var features = [];
+                map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
+                    features.push(feature);
+                    feature.set('layer', layer);
+                    if (_this.hoveredFeatures.indexOf(feature)<0) {
+                        changed = true
+                    }
+                });
+
+                if (features.length != _this.hoveredFeatures.length)
+                    changed = true
+
+                if (changed) {
+                    _this.hoveredFeatures = features;
+                    _this.setFeatures(_this.hoveredFeatures);
+                }
+
+                if (_this.hoveredFeatures.length > 0) {
+                    _this.setPosition(evt.coordinate);
+                }
+
+            });
+        }
+    };
+
+
+
+
     /**
      * Parse a comma-separated set of KVP, typically for URL query or fragments
      * @param url
