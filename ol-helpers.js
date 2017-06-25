@@ -254,7 +254,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
 
         this.loadingDiv = options.loadingDiv
         if (!this.loadingDiv) {
-            this.loadingDiv = $("<div style='z-index: 3000; position: absolute; top: 0px;'></div>").text("Loading...")[0]
+            this.loadingDiv = $("<div class='loader' style='font-size: 10px; margin: 40px 40px; z-index: 3000; position: absolute; top: 0px;'></div>")[0]
         }
 
         this.getViewport().appendChild(this.loadingDiv);
