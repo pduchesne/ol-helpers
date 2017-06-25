@@ -1468,21 +1468,19 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
             if (!urls)
                 throw 'TMS URL must be set when using TMS Map type';
             var projection = mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.Mercator // force SRS to 3857 if using OSM baselayer
-            var maxExtent = mapConfig['extent'] && eval(mapConfig['extent'])
+            var extent = mapConfig['extent'] && eval(mapConfig['extent'])
 
-            var baseMapLayer = new OpenLayers.Layer.TMS('Base Layer', urls, {
-                isBaseLayer: isBaseLayer,
-                //wrapDateLine: true,
-                projection: projection,
-                maxExtent: maxExtent,
-                attribution: mapConfig.attribution,
-                // take lower left corner as default origin
-                tileOrigin: new OpenLayers.LonLat(maxExtent[0], maxExtent[1]),
-                //units:"m",
-                layername:mapConfig['layername'],
-                type:'png',
-                resolutions: mapConfig['resolutions'] && eval(mapConfig['resolutions'])
-                //zoomOffset: 5
+            var layerName = mapConfig['layername'];
+            var baseMapLayer = new ol.layer.Tile({
+                title: mapConfig['title'],
+                type: isBaseLayer?'base':undefined,
+                extent: extent,
+                source: new ol.source.XYZ({
+                    projection: projection,
+                    //tileGrid: tileGrid,
+                    //tilePixelRatio: tilePixelRatio,
+                    url: urls + '/1.0.0/' + layerName + '/{z}/{x}/{-y}.png'
+                })
             });
 
             callback (baseMapLayer);
