@@ -10,7 +10,8 @@
   "main": [
     "EsriGeoJSON.js",
     "ol-helpers.js",
-    "ol-layer-switcher.js"
+    "ol-layer-switcher.js",
+    "ol-helpers.css"
   ],
   "dependencies": {
     "underscore": ">=1.4.2",
