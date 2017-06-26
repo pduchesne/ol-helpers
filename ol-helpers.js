@@ -1467,8 +1467,17 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
             urls = mapConfig['url'];
             if (!urls)
                 throw 'TMS URL must be set when using TMS Map type';
-            var projection = mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.Mercator // force SRS to 3857 if using OSM baselayer
+            var projection = mapConfig['srs'] ? ol.proj.get(mapConfig['srs']) : OL_HELPERS.Mercator
             var extent = mapConfig['extent'] && eval(mapConfig['extent'])
+
+            var resolutions = mapConfig['resolutions'] && eval(mapConfig['resolutions'])
+
+            var tileGrid = resolutions && new ol.tilegrid.TileGrid({
+                extent: extent,
+                resolutions: resolutions,
+                //origin: [extent[0], extent[1]],
+                tileSize: [256, 256]
+            });
 
             var layerName = mapConfig['layername'];
             var baseMapLayer = new ol.layer.Tile({
@@ -1477,7 +1486,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
                 extent: extent,
                 source: new ol.source.XYZ({
                     projection: projection,
-                    //tileGrid: tileGrid,
+                    tileGrid: tileGrid,
                     //tilePixelRatio: tilePixelRatio,
                     url: urls + '/1.0.0/' + layerName + '/{z}/{x}/{-y}.png'
                 })
