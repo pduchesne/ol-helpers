@@ -16,11 +16,11 @@
   position: absolute;
   right: 10px;
   top: 40px;
+  overflow: auto;
+  max-height: calc(100% - 40px);
 }
 .ol-viewport .layer-switcher button {
-  position: absolute;
-  right: 0px;
-  top: 0px;
+  float: right;
   background-color: red;
   width: 10px;
   height: 10px;
@@ -29,6 +29,16 @@
   background-color: black;
   color: white;
   padding: 5px;
+}
+.ol-viewport .layer-switcher .panel .baseLayerSelector {
+  margin-right: 20px;
+}
+.ol-viewport .layer-switcher .panel ul {
+  padding: 0px;
+}
+.ol-viewport .layer-switcher .panel ul li {
+  list-style-type: none;
+  text-align: left;
 }
 /* Spinning loader */
 .loader {

@@ -20,11 +20,11 @@
     position: absolute;
     right: 10px;
     top: 40px;
+    overflow: auto;
+    max-height: ~"calc(100% - 40px)";
 
     button {
-      position: absolute;
-      right: 0px;
-      top:0px;
+      float: right;
       background-color: red;
       width: 10px;
       height: 10px;
@@ -34,6 +34,19 @@
       background-color: black;
       color: white;
       padding: 5px;
+
+      .baseLayerSelector {
+        margin-right: 20px;
+      }
+
+      ul {
+        padding: 0px;
+
+        li {
+          list-style-type: none;
+          text-align: left;
+        }
+      }
     }
   }
 }
