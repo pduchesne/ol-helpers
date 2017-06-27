@@ -123,3 +123,98 @@
     box-shadow: 0em -2.6em 0em 0em rgba(33, 113, 216, 0.2), 1.8em -1.8em 0 0em rgba(33, 113, 216, 0.2), 2.5em 0em 0 0em rgba(33, 113, 216, 0.2), 1.75em 1.75em 0 0em rgba(33, 113, 216, 0.2), 0em 2.5em 0 0em rgba(33, 113, 216, 0.2), -1.8em 1.8em 0 0em rgba(33, 113, 216, 0.5), -2.6em 0em 0 0em rgba(33, 113, 216, 0.7), -1.8em -1.8em 0 0em #2171d8;
   }
 }
+
+
+.stacked-layers {
+  float: right;
+  width: 35px;
+  height: 35px;
+  margin-right: 5px;
+  position: relative;
+  perspective: 120px;
+
+  .stacked-layer {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform: rotateX(70deg) rotateZ(30deg) translateX(-10px);
+    box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.25) inset;
+    border: 1px solid rgba(0,0,0,0.7);
+
+    & {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: 100% 100%;
+      -o-transform-origin: 100% 100%;
+      -ms-transform-origin: 100% 100%;
+      -webkit-transform-origin: 100% 100%;
+      -moz-transform-origin: 100% 100%;
+    }
+
+
+    &.layer-1 {
+      background-color: rgb(203, 187, 62);
+    }
+    &.layer-2 {
+      background-color: rgb(76, 188, 60);
+    }
+    &.layer-3 {
+      background-color: rgb(57, 140, 187);
+    }
+
+    &.animated {
+      animation: stack-the-layers 1.5s infinite linear both;
+    }
+  }
+
+  .layer-1 {
+    top: -20px;
+    z-index: 103;
+
+    &.animated {
+      animation-delay: 0.6s;
+    }
+
+  }
+  .layer-2 {
+    top: -10px;
+    z-index: 102;
+
+    &.animated {
+      animation-delay: 0.3s;
+    }
+  }
+  .layer-3 {
+    z-index: 101;
+    top: 0px;
+    //transform: scale(1.1) rotateZ(180deg);
+
+    &.animated {
+      animation-delay: 0s;
+    }
+  }
+}
+
+@keyframes stack-the-layers {
+  0% {
+    transform: rotateX(70deg) rotateZ(30deg) translateX(-10px) translateZ(40px);
+    opacity: 0;
+  }
+  30% {
+    transform: rotateX(70deg) rotateZ(30deg) translateX(-10px) translateZ(-3px);
+    opacity: 1;
+  }
+  35% {
+    transform: rotateX(70deg) rotateZ(30deg) translateX(-10px) translateZ(0px);
+    opacity: 1;
+  }
+  100% {
+    transform: rotateX(70deg) rotateZ(30deg) translateX(-10px) translateZ(0px);
+    opacity: 1;
+  }
+}
+

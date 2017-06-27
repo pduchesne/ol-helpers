@@ -13,7 +13,10 @@ ol.control.HilatsLayerSwitcher = function(opt_options) {
         function() {_this.showPanel()},
         function() {_this.hidePanel()}
     )[0];
-    $("<button></button>").appendTo(element);
+    $("<div class='stacked-layers'>" +
+        "<div class='stacked-layer layer-1'/>" +
+        "<div class='stacked-layer layer-2'/>" +
+        "<div class='stacked-layer layer-3'/>").appendTo(element);
     this.panel = $("<div class='panel'></div>").appendTo(element).hide()[0];
 
     ol.control.HilatsLayerSwitcher.enableTouchScroll_(this.panel);
@@ -35,6 +38,10 @@ ol.control.HilatsLayerSwitcher.prototype.showPanel = function() {
         $(this.panel).show()
         this.renderPanel();
     }
+};
+
+ol.control.HilatsLayerSwitcher.prototype.isLoading = function(toggle) {
+    $(this.element).find('.stacked-layer').toggleClass('animated', toggle)
 };
 
 /**

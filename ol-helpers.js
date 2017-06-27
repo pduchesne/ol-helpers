@@ -253,11 +253,12 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
         this.loadingObjects = []
 
         this.loadingDiv = options.loadingDiv
-        if (!this.loadingDiv) {
+        if (this.loadingDiv === undefined) {
             this.loadingDiv = $("<div class='loader' style='font-size: 10px; margin: 40px 40px; z-index: 3000; position: absolute; top: 0px;'></div>")[0]
         }
+        this.loadingListener = options.loadingListener
 
-        this.getViewport().appendChild(this.loadingDiv);
+        this.loadingDiv && this.getViewport().appendChild(this.loadingDiv);
 
         this.updateLoadingStatus();
     };
@@ -265,9 +266,11 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
 
     OL_HELPERS.LoggingMap.prototype.updateLoadingStatus = function() {
         if (this.loadingObjects.length == 0) {
-            this.loadingDiv.style.display = 'none'
+            this.loadingDiv && (this.loadingDiv.style.display = 'none');
+            this.loadingListener && this.loadingListener(false);
         } else {
-            this.loadingDiv.style.display = ''
+            this.loadingDiv && (this.loadingDiv.style.display = '');
+            this.loadingListener && this.loadingListener(true);
         }
     };
 
