@@ -12,33 +12,53 @@
   font-weight: bold;
   border-bottom: 1px solid #e5e4e7;
 }
-.ol-viewport .layer-switcher {
+.ol-viewport .layer-switcher .stacked-layers {
   position: absolute;
   right: 10px;
   top: 40px;
+  z-index: 10;
+}
+.ol-viewport .layer-switcher .header {
+  display: none;
+  position: absolute;
+  right: 12px;
+  top: 40px;
+  z-index: 9;
+  padding: 5px 45px 5px 5px;
+  background-color: black;
+}
+.ol-viewport .layer-switcher .header .baseLayerSelector select {
+  color: white;
+  width: 100px;
+  background-color: black;
+}
+.ol-viewport .layer-switcher.active .header {
+  display: block;
+}
+.ol-viewport .layer-switcher .layer-list {
+  display: none;
   overflow: auto;
-  max-height: calc(100% - 40px);
+  max-height: calc(100% - 50px);
+  min-width: 150px;
+  right: 10px;
+  top: 40px;
 }
-.ol-viewport .layer-switcher button {
-  float: right;
-  background-color: red;
-  width: 10px;
-  height: 10px;
-}
-.ol-viewport .layer-switcher .panel {
+.ol-viewport .layer-switcher .layer-list .panel {
   background-color: black;
   color: white;
   padding: 5px;
+  margin-bottom: 0px;
 }
-.ol-viewport .layer-switcher .panel .baseLayerSelector {
-  margin-right: 20px;
-}
-.ol-viewport .layer-switcher .panel ul {
+.ol-viewport .layer-switcher .layer-list .panel ul {
   padding: 0px;
+  margin-top: 30px;
 }
-.ol-viewport .layer-switcher .panel ul li {
+.ol-viewport .layer-switcher .layer-list .panel ul li {
   list-style-type: none;
   text-align: left;
+}
+.ol-viewport .layer-switcher.active .layer-list {
+  display: block;
 }
 /* Spinning loader */
 .loader {
@@ -111,11 +131,9 @@
   }
 }
 .stacked-layers {
-  float: right;
   width: 35px;
   height: 35px;
   margin-right: 5px;
-  position: relative;
   perspective: 120px;
 }
 .stacked-layers .stacked-layer {
