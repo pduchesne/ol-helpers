@@ -337,7 +337,8 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
 
         var feature = features[0]; // TODO_OL4 support multiple features
         var htmlContent = "<div class='name'>" + feature.get('name') + "</div>";
-        htmlContent += "<div class='id'>" + feature.get('layer').get('title') +" : "+ feature.getId() + "</div>";
+        var layerTitle = feature && feature.get('layer') && feature.get('layer').get('title')
+        htmlContent += "<div class='id'>" + layerTitle +" : "+ feature.getId() + "</div>";
         /*
          htmlContent += "<table>";
          feature.getKeys().forEach(function(prop) {
@@ -359,7 +360,8 @@ ol.proj.addProjection(new ol.proj.EPSG4326_('EPSG:4326:LONLAT', 'enu'));
                 var changed = false;
                 var features = [];
                 map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
-                    features.push(feature);
+                    if (feature) // sometimes feature is undefined (?!)
+                        features.push(feature);
                     feature.set('layer', layer);
                     if (_this.hoveredFeatures.indexOf(feature)<0) {
                         changed = true
