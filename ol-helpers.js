@@ -168,19 +168,11 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         return bbox;
     }
 
-    /* TODO_OL4 : redefine a strategy to extract extent from parsed capabilities
-    OpenLayers.Layer.ArcgisVectorLayer = OpenLayers.Class(OpenLayers.Layer.Vector,
-        {
-            getDataExtent: function () {
-                var bbox = this.layerDescr &&
-                    (this.layerDescr.bounds ||
-                        (this.layerDescr.latLongBoundingBox && new OpenLayers.Bounds(this.layerDescr.latLongBoundingBox)))
-                return (bbox && bbox.clone().transform(EPSG4326, this.map.getProjectionObject()))
-                    || OpenLayers.Layer.Vector.prototype.getDataExtent.apply(this, arguments)
-            }
-        }
-    )
-    */
+    var getArcGISVectorExtent = function() {
+        var bbox = this.get('arcgisDescr') && this.get('arcgisDescr').bounds;
+        return bbox;
+    }
+
 
     var pendingEPSGRequests = {};
     var searchEPSG = function(query) {
@@ -425,17 +417,23 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
 
     var parseArcGisDescriptor = function (url, callback, failCallback) {
 
-        OpenLayers.Request.GET({
-            url: url,
-            params: {f: "pjson"},
-            success: function (request) {
-                callback(JSON.parse(request.responseText))
-            },
-            failure: failCallback || function () {
-                alert("Trouble getting ArcGIS descriptor");
-                OpenLayers.Console.error.apply(OpenLayers.Console, arguments);
+        var params = {f: "pjson"};
+
+        fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
+            {method:'GET'}
+        ).then(
+            function(response) {
+                return response.text();
             }
-        });
+        ).then(
+            function(text) {
+                var descriptor = JSON.parse(text)
+                callback(descriptor)
+            }
+        ).catch(failCallback || function(ex) {
+            console.warn("Trouble getting ArcGIS descriptor");
+            console.warn(ex);
+        })
     }
 
     var fetchWFSCapas = function (url, callback, failCallback) {
@@ -1065,7 +1063,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                         var mapLayer;
                         if (useTiling) {
                             mapLayer = new ol.layer.Tile({
-                                title: candidate.Name,
+                                title: candidate.Title || candidate.Name,
                                 visible: idx == 0,
                                 //extent: ,
                                 source: new ol.source.TileWMS({
@@ -1086,7 +1084,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                                     params: {LAYERS: candidate.Name,
                                         TRANSPARENT: true,
                                         VERSION: ver,
-                                        EXCEPTIONS: "INIMAGE"}
+                                        EXCEPTIONS: "INIMAGE"},
                                     ratio: 1
                                 })
                             })
@@ -1270,7 +1268,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
             function (descriptor) {
 
                 if (descriptor.type == "Feature Layer") {
-                    var newLayer = OL_HELPERS.createArcgisFeatureLayer(layerBaseUrl || url, descriptor, true)
+                    var newLayer = OL_HELPERS.createArcgisFeatureLayer((layerBaseUrl || url) + "/query", descriptor, true)
                     layerProcessor(newLayer)
                 } else if (descriptor.type == "Group Layer") {
                     // TODO intermediate layer
@@ -1278,7 +1276,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                     var isFirst = true
                     $_.each(descriptor.layers, function (layer, idx) {
                         if (!layer.subLayerIds) {
-                            var newLayer = OL_HELPERS.createArcgisFeatureLayer((layerBaseUrl || url) + "/" + layer.id, layer, isFirst)
+                            var newLayer = OL_HELPERS.createArcgisFeatureLayer((layerBaseUrl || url) + "/" + layer.id + "/query", layer, isFirst)
                             layerProcessor(newLayer)
                             isFirst = false
                         }
@@ -1292,61 +1290,75 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
 
     OL_HELPERS.createArcgisFeatureLayer = function (url, descriptor, visible) {
 
-        //TODO fetch layer descriptor to extract extent
-        var esrijson = new OpenLayers.Layer.ArcgisVectorLayer(
-            descriptor.name,
-            {
-                layerDescr: descriptor,
-                projection: EPSG4326,
-                strategies: [new OpenLayers.Strategy.BBOXWithMax({maxFeatures: MAX_FEATURES, ratio: 1})],
-                visibility: visible,
-                styleMap: defaultStyleMap,
-                protocol: new OpenLayers.Protocol.Script({
-                    url: url +   //build ArcGIS Server query string
-                        "/query?dummy=1&" +
-                        //"geometry=-180%2C-90%2C180%2C90&" +
-                        "geometryType=esriGeometryEnvelope&" +
-                        "inSR=4326&" +
-                        "spatialRel=esriSpatialRelIntersects&" +
-                        "outFields=*&" +
-                        "outSR=4326&" +
-                        "returnGeometry=true&" +
-                        "returnIdsOnly=false&" +
-                        "returnCountOnly=false&" +
-                        "returnZ=false&" +
-                        "returnM=false&" +
-                        "returnDistinctValues=false&" +
-                        /*
-                         "where=&" +
-                         "text=&" +
-                         "objectIds=&" +
-                         "time=&" +
-                         "relationParam=&" +
-                         "maxAllowableOffset=&" +
-                         "geometryPrecision=&" +
-                         "orderByFields=&" +
-                         "groupByFieldsForStatistics=&" +
-                         "outStatistics=&" +
-                         "gdbVersion=&" +
-                         */
-                        "f=pjson",
-                    format: new OpenLayers.Format.EsriGeoJSON(),
-                    maxFeatures: 1000,
-                    parseFeatures: function (data) {
-                        return this.format.read(data);
-                    },
-                    filterToParams: function (filter, params) {
-                        var format = new OpenLayers.Format.QueryStringFilter({srsInBBOX: this.srsInBBOX})
-                        var params = format.write(filter, params)
-                        params.geometry = params.bbox
-                        delete params.bbox
+        var format = new ol.format.EsriJSON();
 
-                        return params
-                    }
-                })
-            });
+        var defaultQueryParams = {
+            "dummy" : 1,
+            "geometryType" : "esriGeometryEnvelope",
+            "inSR" : "4326",
+            "spatialRel" : "esriSpatialRelIntersects",
+            "outFields" : "*",
+            "outSR" : "4326",
+            "returnGeometry" : true,
+            "returnIdsOnly" : false,
+            "returnCountOnly" : false,
+            "returnZ" : false,
+            "returnM" : false,
+            "returnDistinctValues" : false,
+            "f" : "pjson"
+        }
 
-        return esrijson
+        var layer = new ol.layer.Vector({
+            title: descriptor.name,
+            source: new ol.source.Vector({
+                loader: function (extent, resolution, mapProjection) {
+                    var outSrs = OL_HELPERS.EPSG4326;
+
+                    var queryParams = _.extend(
+                        {},
+                        defaultQueryParams,
+                        {
+                            "geometry" : extent.join(','),
+                            "inSR" : mapProjection.getCode().split(':').pop(),
+                            "outSR" : outSrs.getCode().split(':').pop()
+                        }
+                    )
+
+                    layer.getSource().setState(ol.source.State.LOADING)
+
+                    return fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + kvp2string(queryParams),
+                        {method: 'GET'}
+                    ).then(
+                        function (response) {
+                            return response.text();
+                        }
+                    ).then(
+                        function (text) {
+
+                            var features = format.readFeatures(text, {featureProjection: mapProjection, dataProjection: outSrs});
+
+                            layer
+                                .getSource()
+                                .addFeatures(features);
+                            layer.getSource().setState(ol.source.State.READY);
+
+                            //return features.length >= MAX_FEATURES
+                        }
+                    ).catch(function (ex) {
+                            layer.getSource().setState(ol.source.State.ERROR);
+                            console.warn("ArcGIS GetFeatures failed");
+                            console.warn(ex);
+                        })
+                },
+                strategy: ol.loadingstrategy.bbox
+            }),
+            visible : visible
+        });
+        // override getExtent to take advertised bbox into account first
+        layer.getSource().set('arcgisDescr', descriptor);
+        layer.getSource().getFullExtent = getArcGISVectorExtent;
+
+        return layer;
     }
 
 
