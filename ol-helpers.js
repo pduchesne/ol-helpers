@@ -1178,23 +1178,6 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                             mapLayer.getSource().updateDimensions(dimensions);
                         }
 
-                        /*
-                         var mapLayer = new OpenLayers.Format.WMTSCapabilities().createLayer(
-                         capas,
-                         {
-                         mlDescr: candidate,
-                         name: candidate.title,
-                         layer: candidate.identifier,
-                         //format: "image/png",  // TODO take format from layer descriptor
-                         isBaseLayer: false,
-                         visibility: idx == 0,
-                         projection : projection,
-                         resolutions: resolutions,
-                         //requestEncoding : "KVP" //TODO is this needed ?
-                         }
-                         );
-                         */
-
                         mapLayer.getSource().set('mlDescr', candidate);
                         mapLayer.getSource().getFullExtent = getWMTSSourceExtent;
 
@@ -1366,28 +1349,6 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         return esrijson
     }
 
-
-    OL_HELPERS.displayFeatureInfo = function (map, layer, info, pixel) {
-        info.css({
-            left: pixel[0] + 'px',
-            top: (pixel[1] - 15) + 'px'
-        });
-        map.getFeatures({
-            pixel: pixel,
-            layers: [layer],
-            success: function (layerFeatures) {
-                var feature = layerFeatures[0][0];
-                if (feature) {
-                    info.tooltip('hide')
-                        .attr('data-original-title', feature.get('name'))
-                        .tooltip('fixTitle')
-                        .tooltip('show');
-                } else {
-                    info.tooltip('hide');
-                }
-            }
-        });
-    };
 
     OL_HELPERS.createLayerFromConfig = function(mapConfig, isBaseLayer, callback) {
         var urls;
