@@ -200,8 +200,18 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                 });
             if (!alreadyLoaded) {
                 // return value of loader is true if extent was partially loaded (due to max features cap)
-                var extentPartiallyCovered = this.loader_.call(this, extentToLoad, resolution, projection);
-                loadedExtentsRtree.insert(extentToLoad, {extent: extentToLoad.slice(), extentCovered: !extentPartiallyCovered});
+                var promise = this.loader_.call(this, extentToLoad, resolution, projection);
+                var insertExtentFn = function(extentCovered) {
+                    loadedExtentsRtree.insert(extentToLoad, {extent: extentToLoad.slice(), extentCovered: extentCovered});
+                }
+                if (promise) {
+                    promise.then(
+                        function(extentPartiallyCovered) { insertExtentFn(!extentPartiallyCovered) },
+                        function(err) { insertExtentFn(false) });
+                } else {
+                    insertExtentFn(true)
+                }
+
             }
         }
     };
@@ -359,27 +369,37 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         this.hoveredFeatures = [];
     };
     ol.inherits(OL_HELPERS.FeatureInfoOverlay, ol.Overlay);
-    OL_HELPERS.FeatureInfoOverlay.prototype.setFeatures = function(features) {
+
+    OL_HELPERS.FeatureInfoOverlay.prototype.setFeatures = function(features, displayDetails) {
         if (features.length == 0) {
             this.setPosition(undefined);
             return;
         }
 
-        var feature = features[0]; // TODO_OL4 support multiple features
-        var htmlContent = "<div class='name'>" + feature.get('name') + "</div>";
-        var layerTitle = feature && feature.get('layer') && feature.get('layer').get('title')
-        htmlContent += "<div class='id'>" + layerTitle +" : "+ feature.getId() + "</div>";
-        /*
-         htmlContent += "<table>";
-         feature.getKeys().forEach(function(prop) {
-         htmlContent += "<tr><td>" + prop + "</td><td>" + feature.get(prop) + "</td></tr></div>"
-         })
-         htmlContent += "</table>"
-         */
+        var htmlContent;
 
+        if (displayDetails) {
+            var feature = features[0]; // TODO_OL4 support multiple features
+
+            var layerTitle = feature && feature.layer && feature.layer.get('title')
+            htmlContent = "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
+
+            htmlContent += "<table>";
+            feature.getKeys().forEach(function(prop) {
+                htmlContent += "<tr><td>" + prop + "</td><td>" + feature.get(prop) + "</td></tr></div>"
+            })
+            htmlContent += "</table>"
+        } else {
+            htmlContent = "";
+            features.forEach(function(feature) {
+                var layerTitle = feature && feature.layer && feature.layer.get('title')
+                htmlContent += "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
+            })
+        }
 
         $(this.getElement()).find('.popupContent').html(htmlContent);
     }
+
     OL_HELPERS.FeatureInfoOverlay.prototype.handleMapChanged = function() {
         ol.Overlay.prototype.handleMapChanged.call(this);
 
@@ -387,12 +407,13 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         var _this = this;
         if (map) {
             map.on('pointermove', function(evt) {
+
                 var changed = false;
                 var features = [];
                 map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
                     if (feature) // sometimes feature is undefined (?!)
                         features.push(feature);
-                    feature.set('layer', layer);
+                    feature.layer = layer
                     if (_this.hoveredFeatures.indexOf(feature)<0) {
                         changed = true
                     }
@@ -402,8 +423,11 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                     changed = true
 
                 if (changed) {
+                    if (_this.displayDetailsTimeout)
+                        clearTimeout(_this.displayDetailsTimeout)
                     _this.hoveredFeatures = features;
                     _this.setFeatures(_this.hoveredFeatures);
+                    _this.displayDetailsTimeout = setTimeout(function() {_this.setFeatures(_this.hoveredFeatures, true);}, 500);
                 }
 
                 if (_this.hoveredFeatures.length > 0) {
@@ -974,7 +998,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
 
                                                             ftLayer.getSource().setState(ol.source.State.LOADING)
 
-                                                            fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + kvp2string(params),
+                                                            return fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + kvp2string(params),
                                                                 {method: 'GET'}
                                                             ).then(
                                                                 function (response) {
