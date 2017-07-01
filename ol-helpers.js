@@ -20,6 +20,17 @@ if (typeof proj4 != "undefined" && proj4) {
     };
 }
 
+String.prototype.hashCode = function() {
+    var hash = 0, i, chr;
+    if (this.length === 0) return hash;
+    for (i = 0; i < this.length; i++) {
+        chr   = this.charCodeAt(i);
+        hash  = ((hash << 5) - hash) + chr;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
+};
+
 if (window.Proj4js) {
     // add your projection definitions here
     // definitions can be found at http://spatialreference.org/ref/epsg/{xxxx}/proj4js/
@@ -947,6 +958,16 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                                                                      }
                                                                      }
                                                                      */
+
+                                                                    // generate fid from properties hash to avoid multiple insertion of same feature
+                                                                    // (when max_features strategy is applied and features have no intrisic ID)
+                                                                    features.forEach(function(feature) {
+                                                                        if (feature.getId() === undefined) {
+                                                                            var hashkey = new ol.format.GeoJSON().writeFeature(feature).hashCode();
+                                                                            feature.setId(hashkey);
+                                                                        }
+                                                                    })
+
                                                                     ftLayer
                                                                         .getSource()
                                                                         .addFeatures(features);
