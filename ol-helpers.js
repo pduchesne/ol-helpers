@@ -612,6 +612,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         return kml;
     }
 
+    /* TODO_OL4 */
     OL_HELPERS.createGFTLayer = function (tableId, GoogleAPIKey) {
         return new OpenLayers.Layer.Vector(
             "GFT", {
@@ -660,6 +661,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
             })
     }
 
+    /* TODO_OL4 */
     OL_HELPERS.createGMLLayer = function (url) {
 
         var gml = new OpenLayers.Layer.Vector("GML", {
@@ -1272,7 +1274,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         return geojson;
     }
 
-
+    /* TODO_OL4 */
     OL_HELPERS.createEsriGeoJSONLayer = function (url) {
 
         var esrijson = new OpenLayers.Layer.Vector(
@@ -1410,7 +1412,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
 
 
         if (mapConfig.type == 'osm') {
-
+            /* TODO_OL4 */
             var baseMapLayer = new OpenLayers.Layer.OSM(
                 null,
                 null,
