@@ -75,6 +75,17 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         return !isNaN(parseFloat(n)) && isFinite(n);
     }
 
+    // Override decimal parsers, as some capabilities use commas as decimal separator
+    // (e.g. http://geoservices.wallonie.be/arcgis/services/EAU/ALEA_2016/MapServer/WMSServer)
+    var originalReadDecimal = ol.format.XSD.readDecimalString;
+    ol.format.XSD.readDecimalString = function(string) {
+        if (string) {
+            string = string.replace(',', '.');
+        }
+        return originalReadDecimal(string);
+    };
+
+
     ol.Map.prototype.addLayerWithExtent = function (layer) {
         this.addLayer(layer)
 
