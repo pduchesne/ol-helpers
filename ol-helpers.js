@@ -1087,65 +1087,74 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         capaUrl = OL_HELPERS.cleanOGCUrl(capaUrl)
         getMapUrl = OL_HELPERS.cleanOGCUrl(getMapUrl)
 
+
         parseWMSCapas(
             capaUrl,
             function (capas) {
-
-                var candidates = capas.Capability.Layer.Layer
-                if (layerName) candidates = candidates.filter(function (layer) {
-                    return layer.Name == layerName
-                })
 
                 var ver = capas.version
 
                 var deferredLayers = []
 
-                $_.each(candidates, function (candidate, idx) {
+                var isFirst = true;
+                var processLayerCandidate = function (candidate) {
 
-                    var deferredLayer = $.Deferred()
-                    deferredLayers.push(deferredLayer)
+                    if (candidate.Name && (!layerName || candidate.Name == layerName)) {
+                        var deferredLayer = $.Deferred()
+                        deferredLayers.push(deferredLayer)
 
-                    try {
-                        var mapLayer;
-                        if (useTiling) {
-                            mapLayer = new ol.layer.Tile({
-                                title: candidate.Title || candidate.Name,
-                                visible: idx == 0,
-                                //extent: ,
-                                source: new ol.source.TileWMS({
-                                    url: getMapUrl,
-                                    params: {LAYERS: candidate.Name,
-                                        TRANSPARENT: true,
-                                        VERSION: ver,
-                                        EXCEPTIONS: "INIMAGE"}
+                        try {
+                            var mapLayer;
+                            if (useTiling) {
+                                mapLayer = new ol.layer.Tile({
+                                    title: candidate.Title || candidate.Name,
+                                    visible: isFirst,
+                                    //extent: ,
+                                    source: new ol.source.TileWMS({
+                                        url: getMapUrl,
+                                        params: {LAYERS: candidate.Name,
+                                            TRANSPARENT: true,
+                                            VERSION: ver,
+                                            EXCEPTIONS: "INIMAGE"}
+                                    })
                                 })
-                            })
-                        } else {
-                            mapLayer = new ol.layer.Image({
-                                title: candidate.Name,
-                                visible: idx == 0,
-                                //extent: ,
-                                source: new ol.source.ImageWMS({
-                                    url: getMapUrl,
-                                    params: {LAYERS: candidate.Name,
-                                        TRANSPARENT: true,
-                                        VERSION: ver,
-                                        EXCEPTIONS: "INIMAGE"},
-                                    ratio: 1
+                            } else {
+                                mapLayer = new ol.layer.Image({
+                                    title: candidate.Name,
+                                    visible: isFirst,
+                                    //extent: ,
+                                    source: new ol.source.ImageWMS({
+                                        url: getMapUrl,
+                                        params: {LAYERS: candidate.Name,
+                                            TRANSPARENT: true,
+                                            VERSION: ver,
+                                            EXCEPTIONS: "INIMAGE"},
+                                        ratio: 1
+                                    })
                                 })
-                            })
+                            }
+                            isFirst = false;
+
+                            mapLayer.getSource().set('mlDescr', candidate);
+                            mapLayer.getSource().getFullExtent = getWMSSourceExtent;
+
+                            layerProcessor(mapLayer)
+
+                            deferredLayer.resolve(mapLayer)
+                        } catch (err) {
+                            deferredLayer.reject(err)
                         }
+                    } else if (candidate.Layer) {
+                        // layer contains nested layers
 
-                        mapLayer.getSource().set('mlDescr', candidate);
-                        mapLayer.getSource().getFullExtent = getWMSSourceExtent;
+                        //TODO create layer groups in switcher
 
-                        layerProcessor(mapLayer)
-
-                        deferredLayer.resolve(mapLayer)
-                    } catch (err) {
-                        deferredLayer.reject(err)
+                        $_.each(candidate.Layer, processLayerCandidate)
                     }
-                })
+
+                }
+
+                $_.each(capas.Capability.Layer.Layer, processLayerCandidate)
 
                 $.when.apply($, deferredLayers).then(function() {
                     deferredResult.resolve(deferredLayers)
