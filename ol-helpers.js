@@ -300,6 +300,32 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
 
     OL_HELPERS.FeatureInfoOverlay = function(options) {
         ol.Overlay.call(this, options);
+        this.filter = options.filter;
+        this.renderFeaturePopup = options.renderFeaturePopup || function(features, displayDetails) {
+            var htmlContent;
+
+            if (displayDetails) {
+                var feature = features[0];
+
+                var layerTitle = feature && feature.layer && feature.layer.get('title')
+                htmlContent = "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
+
+                htmlContent += "<table>";
+                feature.getKeys().forEach(function(prop) {
+                    htmlContent += "<tr><td>" + prop + "</td><td>" + feature.get(prop) + "</td></tr></div>"
+                })
+                htmlContent += "</table>"
+            } else {
+                htmlContent = "";
+                features.forEach(function(feature) {
+                    var layerTitle = feature && feature.layer && feature.layer.get('title')
+                    htmlContent += "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
+                })
+            }
+
+            return htmlContent;
+        }
+
         this.hoveredFeatures = [];
     };
     ol.inherits(OL_HELPERS.FeatureInfoOverlay, ol.Overlay);
@@ -310,28 +336,14 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
             return;
         }
 
-        var htmlContent;
+        var htmlContent = this.renderFeaturePopup(features, displayDetails);
 
-        if (displayDetails) {
-            var feature = features[0];
-
-            var layerTitle = feature && feature.layer && feature.layer.get('title')
-            htmlContent = "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
-
-            htmlContent += "<table>";
-            feature.getKeys().forEach(function(prop) {
-                htmlContent += "<tr><td>" + prop + "</td><td>" + feature.get(prop) + "</td></tr></div>"
-            })
-            htmlContent += "</table>"
+        if (typeof htmlContent === 'string') {
+            $(this.getElement()).find('.popupContent').html(htmlContent);
         } else {
-            htmlContent = "";
-            features.forEach(function(feature) {
-                var layerTitle = feature && feature.layer && feature.layer.get('title')
-                htmlContent += "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
-            })
+            $(this.getElement()).find('.popupContent').append(htmlContent);
         }
 
-        $(this.getElement()).find('.popupContent').html(htmlContent);
     }
 
     OL_HELPERS.FeatureInfoOverlay.prototype.handleMapChanged = function() {
@@ -345,7 +357,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                 var changed = false;
                 var features = [];
                 map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
-                    if (feature) // sometimes feature is undefined (?!)
+                    if (feature && (!_this.filter || _this.filter(feature, layer))) // sometimes feature is undefined (?!)
                         features.push(feature);
                     feature.layer = layer
                     if (_this.hoveredFeatures.indexOf(feature)<0) {
@@ -1357,6 +1369,15 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                         function (text) {
 
                             var features = format.readFeatures(text, {featureProjection: mapProjection, dataProjection: outSrs});
+
+                            // generate fid from properties hash to avoid multiple insertion of same feature
+                            // (when max_features strategy is applied and features have no intrisic ID)
+                            features.forEach(function(feature) {
+                                if (feature.getId() === undefined) {
+                                    var hashkey = new ol.format.GeoJSON().writeFeature(feature).hashCode();
+                                    feature.setId(hashkey);
+                                }
+                            })
 
                             layer
                                 .getSource()
