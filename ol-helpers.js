@@ -336,6 +336,10 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
 
             return htmlContent;
         }
+        this.computePosition = options.computePosition || function(features, evt) {
+            // default positioning : take current cursor pos
+            return evt.coordinate;
+        }
 
         this.hoveredFeatures = [];
     };
@@ -343,7 +347,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
 
     OL_HELPERS.FeatureInfoOverlay.prototype.setFeatures = function(features, displayDetails) {
         if (features.length == 0) {
-            this.setPosition(undefined);
+            //this.setPosition(undefined);
             return;
         }
 
@@ -352,7 +356,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         if (typeof htmlContent === 'string') {
             $(this.getElement()).find('.popupContent').html(htmlContent);
         } else {
-            $(this.getElement()).find('.popupContent').append(htmlContent);
+            $(this.getElement()).find('.popupContent').empty().append(htmlContent);
         }
 
     }
@@ -388,7 +392,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                 }
 
                 if (_this.hoveredFeatures.length > 0) {
-                    _this.setPosition(evt.coordinate);
+                    _this.setPosition(_this.computePosition(features, evt));
                 }
 
             });
