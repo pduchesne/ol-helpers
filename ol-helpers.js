@@ -1435,17 +1435,19 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         var attribution;
 
 
-        if (mapConfig.type == 'osm') {
-            /* TODO_OL4 */
-            var baseMapLayer = new OpenLayers.Layer.OSM(
-                null,
-                null,
-                {
-                    title: 'OSM Base Layer',
-                    isBaseLayer: isBaseLayer,
-                    transitionEffect: 'resize'
-                }
-            );
+        if (mapConfig.type == 'OSM') {
+            urls = mapConfig['url'];
+
+            var baseMapLayer = new ol.layer.Tile(
+                {title: mapConfig['title'],
+                    type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
+                    source:new ol.source.OSM({
+                        url: urls,
+                        /* TODO
+                       attribution: mapConfig.attribution
+                       */
+                    })
+                });
 
             callback (baseMapLayer);
 
