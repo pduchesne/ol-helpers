@@ -713,27 +713,27 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         var $capas = $(xmlDoc);
 
         var ver = $($capas[0].getElementsByTagNameNS('*', 'WFS_Capabilities')).attr('version');
-        var featureTypes = $capas.find('FeatureTypeList').find('FeatureType');
+        var featureTypes = $($capas[0].getElementsByTagNameNS('*', 'FeatureType'));
         featureTypes = featureTypes.get().map(function (featureType, idx) {
             var $featureType = $(featureType);
 
             var bbox;
             // let's be lenient and look for latlonbbox or wgs84bbox regardless of advertised version
-            var wgs84bbox = $featureType.find('WGS84BoundingBox')
-            var latlonbbox = $featureType.find('LatLongBoundingBox')
+            var wgs84bbox = $(featureType.getElementsByTagNameNS('*', 'WGS84BoundingBox'));
+            var latlonbbox = $(featureType.getElementsByTagNameNS('*', 'LatLongBoundingBox'));
             if (wgs84bbox.length && wgs84bbox[0].children.length > 0) {
-                var ll = wgs84bbox.find('LowerCorner').text().split(' ');
-                var ur = wgs84bbox.find('UpperCorner').text().split(' ')
+                var ll = $(wgs84bbox[0].getElementsByTagNameNS('*', 'LowerCorner')).text().split(' ');
+                var ur = $(wgs84bbox[0].getElementsByTagNameNS('*', 'UpperCorner')).text().split(' ')
                 bbox = [parseFloat(ll[0]), parseFloat(ll[1]), parseFloat(ur[0]), parseFloat(ur[1])]
             } else if (latlonbbox.length) {
                 bbox = [parseFloat(latlonbbox.attr('minx')), parseFloat(latlonbbox.attr('miny')), parseFloat(latlonbbox.attr('maxx')), parseFloat(latlonbbox.attr('maxy'))]
             }
 
             return {
-                name: $featureType.find('Name').text(),
-                title: $featureType.find('Title').text(),
-                defaultSrs: $featureType.find('DefaultSRS, DefaultCRS').text(),
-                otherSrs: $featureType.find('SRS').text(),
+                name: $(featureType.getElementsByTagNameNS('*', 'Name')).text(),
+                title: $(featureType.getElementsByTagNameNS('*', 'Title')).text(),
+                defaultSrs: $(featureType.getElementsByTagNameNS('*', 'DefaultSRS')).text() || $(featureType.getElementsByTagNameNS('*', 'DefaultCRS')).text(),
+                otherSrs: $(featureType.getElementsByTagNameNS('*', 'SRS')).text(),
                 wgs84bbox: bbox
             }
         })
