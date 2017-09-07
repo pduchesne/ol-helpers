@@ -712,7 +712,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
     OL_HELPERS.parseWfsCapabilities = function(xmlDoc) {
         var $capas = $(xmlDoc);
 
-        var ver = $capas.find('WFS_Capabilities').attr('version');
+        var ver = $($capas[0].getElementsByTagNameNS('*', 'WFS_Capabilities')).attr('version');
         var featureTypes = $capas.find('FeatureTypeList').find('FeatureType');
         featureTypes = featureTypes.get().map(function (featureType, idx) {
             var $featureType = $(featureType);
@@ -747,13 +747,16 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         var $descr = $(xmlDoc);
 
         // WARN extremely fragile and hackish way to parse FT schema
-        var $props = $descr.find('complexType').find('sequence').find('element');
-        var featureTypeProperties = $props.get().map(function(prop) {
+        var props = $descr[0].getElementsByTagNameNS('*', 'complexType')[0]
+                 .getElementsByTagNameNS('*', 'sequence')[0]
+                 .getElementsByTagNameNS('*', 'element')
+
+        var featureTypeProperties = $(props).map(function(idx, prop) {
             return {
                 type: $(prop).attr('type'),
                 name: $(prop).attr('name')
             }
-        })
+        }).get();
 
         return {
             properties: featureTypeProperties
