@@ -1017,6 +1017,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                                                     visible: idx == 0
                                                 });
                                                 // override getExtent to take advertised bbox into account first
+                                                ftLayer.getSource().set('name', candidate.name);
                                                 ftLayer.getSource().set('ftDescr', candidate);
                                                 ftLayer.getSource().getFullExtent = getFTSourceExtent;
 
@@ -1139,6 +1140,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                             }
                             isFirst = false;
 
+                            mapLayer.getSource().set('name', candidate.Name);
                             mapLayer.getSource().set('mlDescr', candidate);
                             mapLayer.getSource().getFullExtent = getWMSSourceExtent;
 
@@ -1235,6 +1237,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                             mapLayer.getSource().updateDimensions(dimensions);
                         }
 
+                        mapLayer.getSource().set('name', candidate.Identifier);
                         mapLayer.getSource().set('mlDescr', candidate);
                         mapLayer.getSource().getFullExtent = getWMTSSourceExtent;
 
@@ -1423,6 +1426,8 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
             visible : visible
         });
         // override getExtent to take advertised bbox into account first
+
+        layer.getSource().set('name', descriptor.name);
         layer.getSource().set('arcgisDescr', descriptor);
         layer.getSource().getFullExtent = getArcGISVectorExtent;
 
