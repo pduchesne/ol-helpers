@@ -967,7 +967,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                                                             ftLayer.getSource().setState(ol.source.State.LOADING)
 
                                                             return fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + kvp2string(params),
-                                                                {method: 'GET'}
+                                                                {method:'GET', credentials: 'include'}
                                                             ).then(
                                                                 function (response) {
                                                                     return response.text();
@@ -1392,7 +1392,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
                     layer.getSource().setState(ol.source.State.LOADING)
 
                     return fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + kvp2string(queryParams),
-                        {method: 'GET'}
+                        {method:'GET', credentials: 'include'}
                     ).then(
                         function (response) {
                             return response.text();
