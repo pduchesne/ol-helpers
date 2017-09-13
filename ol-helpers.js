@@ -347,7 +347,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
 
     OL_HELPERS.FeatureInfoOverlay.prototype.setFeatures = function(features, displayDetails) {
         if (features.length == 0) {
-            //this.setPosition(undefined);
+            this.setPosition(undefined);
             return;
         }
 
