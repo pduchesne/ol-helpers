@@ -458,7 +458,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         var params = {f: "pjson"};
 
         fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
-            {method:'GET'}
+            {method:'GET', credentials: 'include'}
         ).then(
             function(response) {
                 return response.text();
@@ -482,7 +482,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
             REQUEST: "GetCapabilities"
         }
         fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
-            {method:'GET'}
+            {method:'GET', credentials: 'include'}
         ).then(
             function(response) {
                 return response.text();
@@ -507,7 +507,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
             VERSION: ver
         }
         fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
-            {method:'GET'}
+            {method:'GET', credentials: 'include'}
         ).then(
             function(response) {
                 return response.text();
@@ -530,7 +530,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
             REQUEST: "GetCapabilities"
         }
         fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
-              {method:'GET'}
+              {method:'GET', credentials: 'include'}
         ).then(
             function(response) {
                 return response.text();
@@ -556,7 +556,7 @@ ol.proj.addProjection(new ol.proj.EPSG4326.Projection_('EPSG:4326:LONLAT', 'enu'
         };
 
         fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
-            {method:'GET'}
+            {method:'GET', credentials: 'include'}
         ).then(
             function(response) {
                 return response.text();
