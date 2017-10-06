@@ -32,6 +32,7 @@
   min-width: 150px;
   right: 10px;
   top: 40px;
+  z-index: 80;
 }
 .ol-viewport .layer-switcher .layer-list .panel {
   background-color: black;
