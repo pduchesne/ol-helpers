@@ -365,6 +365,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         }
 
         this.hoveredFeatures = [];
+
+        this.on('change:map', function(evt) {
+            this.HL_handleMapChanged();
+        })
     };
     ol.inherits(OL_HELPERS.FeatureInfoOverlay, ol.Overlay);
 
@@ -391,9 +395,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
     }
 
-    OL_HELPERS.FeatureInfoOverlay.prototype.handleMapChanged = function() {
-        ol.Overlay.prototype.handleMapChanged.call(this);
-
+    OL_HELPERS.FeatureInfoOverlay.prototype.HL_handleMapChanged = function() {
         var map = this.getMap();
         var _this = this;
         if (map) {
