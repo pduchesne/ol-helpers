@@ -20,6 +20,24 @@ if (typeof proj4 != "undefined" && proj4) {
     };
 }
 
+if (!ol.source.State) {
+    ol.source.State = {
+        UNDEFINED: 'undefined',
+        LOADING: 'loading',
+        READY: 'ready',
+        ERROR: 'error'
+    };
+}
+
+var OLgetState = ol.source.Source.prototype.getState
+ol.source.Source.prototype.getState = function() {
+    return this.HL_state || OLgetState();
+};
+ol.source.Source.prototype.setState = function(state) {
+    this.HL_state = state;
+    this.changed();
+};
+
 String.prototype.hashCode = function() {
     var hash = 0, i, chr;
     if (this.length === 0) return hash;
@@ -1307,17 +1325,30 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             defaultDataProjection: OL_HELPERS.EPSG4326
         });
 
+        var success = function(features, dataProjection) {
+            geojson.getSource().addFeatures(features);
+            // set source as ready once features are loaded
+            geojson.getSource().set('waitingOnFirstData', false)
+            geojson.getSource().setState(ol.source.State.READY);
+        }
+
         // use a custom loader to set source state
-        var geojsonLoader = ol.featureloader.loadFeaturesXhr(
-            url,
-            geojsonFormat,
-            function(features, dataProjection) {
-                this.addFeatures(features);
-                // set source as ready once features are loaded
-                geojson.getSource().set('waitingOnFirstData', false)
-                this.setState(ol.source.State.READY);
-            },
-            /* FIXME handle error */ ol.nullFunction);
+        var geojsonLoader =
+            function(extent, resolution, projection) {
+
+                $.ajax({url: url, dataType: 'json', success: function(response) {
+                    if (!response || response.error) {
+                        //TODO
+                    } else {
+                        var source = response
+
+                        var features = geojsonFormat.readFeatures(source,
+                            {featureProjection: projection})
+                        var sourceProjection = geojsonFormat.readProjection(source)
+                        success.call(this, features, sourceProjection);
+                    }
+                }});
+            }
 
         var geojson = new ol.layer.Vector({
             title: 'GeoJSON',
