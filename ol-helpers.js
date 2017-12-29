@@ -106,17 +106,17 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         return !isNaN(parseFloat(n)) && isFinite(n);
     }
 
-    // Override decimal parsers, as some capabilities use commas as decimal separator
+    // When possible, override decimal parsers, as some capabilities use commas as decimal separator
     // (e.g. http://geoservices.wallonie.be/arcgis/services/EAU/ALEA_2016/MapServer/WMSServer)
-    /* Removed - requires debug version of OL
     var originalReadDecimal = ol.format.XSD.readDecimalString;
-    ol.format.XSD.readDecimalString = function(string) {
-        if (string) {
-            string = string.replace(',', '.');
-        }
-        return originalReadDecimal(string);
-    };
-    */
+    if (originalReadDecimal) {
+        ol.format.XSD.readDecimalString = function (string) {
+            if (string) {
+                string = string.replace(',', '.');
+            }
+            return originalReadDecimal(string);
+        };
+    }
 
 
     ol.Map.prototype.addLayerWithExtent = function (layer) {
@@ -1215,9 +1215,14 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
                 $_.each(capas.Capability.Layer.Layer, processLayerCandidate)
 
-                $.when.apply($, deferredLayers).then(function() {
-                    deferredResult.resolve(deferredLayers)
-                })
+                $.when.apply($, deferredLayers).then(
+                    function() {
+                        deferredResult.resolve(deferredLayers)
+                    },
+                    function(err) {
+                        deferredResult.reject(err)
+                    }
+                )
             },
             // failure callback
             function(err) {
