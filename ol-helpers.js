@@ -108,7 +108,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
     // When possible, override decimal parsers, as some capabilities use commas as decimal separator
     // (e.g. http://geoservices.wallonie.be/arcgis/services/EAU/ALEA_2016/MapServer/WMSServer)
-    var originalReadDecimal = ol.format.XSD.readDecimalString;
+    var originalReadDecimal = ol.format && ol.format.XSD && ol.format.XSD.readDecimalString;
     if (originalReadDecimal) {
         ol.format.XSD.readDecimalString = function (string) {
             if (string) {
