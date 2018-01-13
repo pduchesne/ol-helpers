@@ -29,11 +29,11 @@ if (!ol.source.State) {
     };
 }
 
-var OLgetState = ol.source.Source.prototype.getState
-ol.source.Source.prototype.getState = function() {
-    return this.HL_state || OLgetState();
+var OLgetState = ol.source.Vector.prototype.getState
+ol.source.Vector.prototype.getState = function() {
+    return this.HL_state || OLgetState.call(this);
 };
-ol.source.Source.prototype.setState = function(state) {
+ol.source.Vector.prototype.setState = function(state) {
     this.HL_state = state;
     this.changed();
 };
@@ -170,6 +170,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
      * Override loadFeatures to implement max features cap.
      * Take into account return value of loader func and reload new batches of data when needed
      */
+    /*
     ol.source.Vector.prototype.loadFeatures = function(
         extent, resolution, projection) {
         var loadedExtentsRtree = this.loadedExtentsRtree_;
@@ -201,6 +202,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             }
         }
     };
+    */
 
 
 
@@ -208,6 +210,11 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     // Returns the WGS84 bbox
     var getFTSourceExtent = function() {
         var bbox = this.get('ftDescr') && this.get('ftDescr').wgs84bbox;
+        return bbox;
+    }
+
+    var getFT3SourceExtent = function() {
+        var bbox = this.get('ftDescr') && this.get('ftDescr').extent.bbox;
         return bbox;
     }
 
@@ -270,6 +277,11 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         this.loadingObjects = []
 
+        this.msgDiv = options.msgDiv
+        if (this.msgDiv === undefined) {
+            this.msgDiv = $("<div class='msg' style='font-size: 12px; padding: 2px 3px; z-index: 3000; background-color: rgba(255,255,255,0.6);  position: absolute; left: 10px; top:10px; display: none;'></div>")[0]
+        }
+
         this.loadingDiv = options.loadingDiv
         if (this.loadingDiv === undefined) {
             this.loadingDiv = $("<div class='loader' style='font-size: 10px; margin: 40px 40px; z-index: 3000; position: absolute; top: 0px;'></div>")[0]
@@ -277,6 +289,27 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         this.loadingListener = options.loadingListener
 
         this.loadingDiv && this.getViewport().appendChild(this.loadingDiv);
+        this.msgDiv && this.getViewport().appendChild(this.msgDiv);
+
+        this.partiallyLoadedSources = [];
+
+        this.on("change:partiallyLoaded", function() {
+            if (this.msgDiv) {
+                if (this.partiallyLoadedSources.length > 0) {
+                    var _thisMap = this;
+                    $(this.msgDiv)
+                        .text("Partial load - zoom in for more ")
+                        .append($("<button>Refresh</button>").click(function() {
+                            _thisMap.partiallyLoadedSources.forEach(function(src) {
+                                src.clear();
+                            })
+                        }))
+                    this.msgDiv.style.display = '';
+                } else {
+                    this.msgDiv.style.display = 'none';
+                }
+            }
+        });
 
         this.updateLoadingStatus();
     };
@@ -307,6 +340,19 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         var layerEnds = function(event) {
             var loadingObj = event.tile || event.target || this;
+
+            var pls_idx = _this.partiallyLoadedSources.indexOf(loadingObj);
+            if (loadingObj.get('partial_load')) {
+                if (pls_idx == -1)
+                    _this.partiallyLoadedSources.push(loadingObj);
+                    _this.dispatchEvent("change:partiallyLoaded");
+            } else {
+                if (pls_idx >= 0) {
+                    _this.partiallyLoadedSources.splice(pls_idx, 1);
+                    _this.dispatchEvent("change:partiallyLoaded")
+                }
+            }
+
             var idx = _this.loadingObjects.indexOf(loadingObj)
             if (idx >= 0) {
                 _this.loadingObjects.splice(idx, 1)
@@ -320,14 +366,38 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var layerError = layerEnds
 
         layer.getSource().on('change', function(e) {
-            if (layer.getSource().getState() == 'loading') {
+            if (layer.getSource().getState() == ol.source.State.LOADING) {
                 layerStarts.call(this, e)
-            } else if (layer.getSource().getState() == 'ready')
+            } else if (layer.getSource().getState() == ol.source.State.READY)
             {
                 layerEnds.call(this, e)
-            } else if (layer.getSource().getState() == 'error')
+            } else if (layer.getSource().getState() == ol.source.State.ERROR)
             {
                 layerError.call(this, e)
+            }
+
+            var pls_idx = _this.partiallyLoadedSources.indexOf(this);
+            if (this.get('partial_load')) {
+                if (pls_idx == -1) {
+                    _this.partiallyLoadedSources.push(loadingObj);
+                    _this.dispatchEvent("change:partiallyLoaded");
+                }
+            } else {
+                if (pls_idx >= 0) {
+                    _this.partiallyLoadedSources.splice(pls_idx, 1);
+                    _this.dispatchEvent("change:partiallyLoaded")
+                }
+            }
+        });
+
+        layer.on('change:visible', function(e) {
+            var pls_idx = _this.partiallyLoadedSources.indexOf(this.getSource());
+            if (this.getVisible() && this.getSource().get('partial_load')) {
+                _this.partiallyLoadedSources.push(loadingObj);
+                _this.dispatchEvent("change:partiallyLoaded");
+            } else if (!this.getVisible() && pls_idx >= 0) {
+                _this.partiallyLoadedSources.splice(pls_idx, 1);
+                _this.dispatchEvent("change:partiallyLoaded")
             }
         });
 
@@ -1055,7 +1125,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                                                         .addFeatures(features);
                                                                     ftLayer.getSource().setState(ol.source.State.READY);
 
-                                                                    return features.length >= MAX_FEATURES
+                                                                    var moreToLoad = features.length >= MAX_FEATURES;
+                                                                    ftLayer.getSource().set('partial_load', moreToLoad);
+
+                                                                    return moreToLoad;
                                                                 }
                                                             ).catch(function (ex) {
                                                                     ftLayer.getSource().setState(ol.source.State.ERROR);
@@ -1136,6 +1209,128 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         return deferredResult;
     }
+
+
+
+
+    OL_HELPERS.withWFS3Types = function (proxyUri, layerProcessor, ftName, map, proxifyFn) {
+
+        var deferredResult = $.Deferred()
+
+        var openAPIclient = new SwaggerClient(
+            proxyUri,
+            {requestInterceptor:
+                proxifyFn && function(req) {
+                    req.url = proxifyFn(req.url);
+                    return req;
+                }
+            })
+            .then (function(openAPIclient) {
+
+                openAPIclient.apis.Capabilities.describeCollections({f: 'json'}).then(
+                    function (capas) {
+
+
+                        var candidates = capas.obj.collections
+                        if (ftName) candidates = capas.featureTypes.filter(function (ft) {
+                            return ft.name == ftName
+                        })
+
+                        var deferredLayers = []
+
+                        candidates.forEach(function (candidate, idx) {
+                            var deferredLayer = $.Deferred();
+                            deferredLayers.push(deferredLayer);
+
+                            var geojsonFormat = new ol.format.GeoJSON({
+                                defaultDataProjection: OL_HELPERS.EPSG4326
+                            });
+                            var ftLayer = new ol.layer.Vector({
+                                title: candidate.title,
+                                source: new ol.source.Vector({
+                                    loader: function (extent, resolution, mapProjection) {
+
+                                        var bbox4326 = ol.proj.transformExtent(extent, mapProjection, OL_HELPERS.EPSG4326)
+
+                                        var params = {
+                                            f: 'json',
+                                            count: MAX_FEATURES,
+                                            bbox: bbox4326.join(',')
+                                        }
+
+                                        this.setState(ol.source.State.LOADING);
+                                        var getOpName = openAPIclient.spec.paths['/'+candidate.name].get.operationId;
+                                        return openAPIclient.apis.Features[getOpName](params).then(
+                                            function (result) {
+
+                                                // make sure we have IDs for every feature
+                                                result.obj.features.forEach(function(jsonFeature) {
+                                                    if (jsonFeature.id === undefined) {
+                                                        if (jsonFeature.ID) {
+                                                            jsonFeature.id = jsonFeature.ID;
+                                                        } else {
+                                                            // generate fid from properties hash to avoid multiple insertion of same feature
+                                                            // (when max_features strategy is applied and features have no intrisic ID)
+                                                            var hashkey = JSON.stringify(jsonFeature);
+                                                            jsonFeature.id = hashkey;
+                                                        }
+                                                    }
+                                                })
+
+                                                var features = geojsonFormat.readFeatures(
+                                                        result.obj || [], // content is undefined when no result (?!)
+                                                    {featureProjection: mapProjection,
+                                                        dataProjection: OL_HELPERS.EPSG4326})
+
+                                                ftLayer
+                                                    .getSource()
+                                                    .addFeatures(features);
+
+                                                var moreToLoad = features.length >= MAX_FEATURES;
+                                                ftLayer.getSource().set('partial_load', moreToLoad);
+                                                ftLayer.getSource().setState(ol.source.State.READY);
+
+
+                                                return moreToLoad
+                                            }
+                                        ).catch(function (ex) {
+                                                ftLayer.getSource().setState(ol.source.State.ERROR);
+                                                console.warn("GetFeatures failed");
+                                                console.warn(ex);
+                                            })
+                                    },
+                                    strategy: ol.loadingstrategy.bbox
+                                }),
+                                visible: idx == 0
+                            });
+                            // override getExtent to take advertised bbox into account first
+                            ftLayer.getSource().set('name', candidate.name);
+                            ftLayer.getSource().set('ftDescr', candidate);
+                            ftLayer.getSource().getFullExtent = getFT3SourceExtent;
+
+                            layerProcessor(ftLayer);
+
+                            deferredLayer.resolve(ftLayer);
+                        })
+
+                        $.when.apply($, deferredLayers).then(function() {
+                            deferredResult.resolve(deferredLayers)
+                        })
+
+                    },
+                    // failure callback
+                    function(err) {
+                        deferredResult.reject(err);
+                    }
+                )
+            }).catch(function(err) {
+                deferredResult.reject(err);
+            })
+
+        return deferredResult;
+    }
+
+
 
 
     OL_HELPERS.withWMSLayers = function (capaUrl, getMapUrl, layerProcessor, layerName, useTiling, map) {
