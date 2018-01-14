@@ -1126,7 +1126,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                                                 {method:'GET', credentials: 'include'}
                                                             ).then(
                                                                 function (response) {
-                                                                    return response.text();
+                                                                    if (!response.ok)
+                                                                        throw "GetFeatures failed: "+response.statusText;
+                                                                    else
+                                                                        return response.text();
                                                                 }
                                                             ).then(
                                                                 function (text) {
