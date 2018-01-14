@@ -277,9 +277,14 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         this.loadingObjects = []
 
+        this.errorDiv = options.errorDiv
+        if (this.errorDiv === undefined) {
+            this.errorDiv = $("<div style='color: #511e17; font-size: 12px; padding: 2px 3px; background-color: rgba(255, 235, 131, 0.80);  display: none;'></div>")[0]
+        }
+
         this.msgDiv = options.msgDiv
         if (this.msgDiv === undefined) {
-            this.msgDiv = $("<div class='msg' style='font-size: 12px; padding: 2px 3px; z-index: 3000; background-color: rgba(255,255,255,0.6);  position: absolute; left: 10px; top:10px; display: none;'></div>")[0]
+            this.msgDiv = $("<div style='font-size: 12px; padding: 2px 3px; background-color: rgba(255,255,255,0.8); display: none;'></div>")[0]
         }
 
         this.loadingDiv = options.loadingDiv
@@ -289,9 +294,13 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         this.loadingListener = options.loadingListener
 
         this.loadingDiv && this.getViewport().appendChild(this.loadingDiv);
-        this.msgDiv && this.getViewport().appendChild(this.msgDiv);
+
+        var msgContainer = $("<div style='position: absolute; z-index: 3000; left: 10px; top:10px;'></div>").appendTo(this.getViewport());
+        this.errorDiv && msgContainer.append(this.errorDiv);
+        this.msgDiv && msgContainer.append(this.msgDiv);
 
         this.partiallyLoadedSources = [];
+        this.erroredSources = [];
 
         this.on("change:partiallyLoaded", function() {
             if (this.msgDiv) {
@@ -307,6 +316,24 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                     this.msgDiv.style.display = '';
                 } else {
                     this.msgDiv.style.display = 'none';
+                }
+            }
+        });
+
+        this.on("change:erroredSource", function() {
+            if (this.errorDiv) {
+                if (this.erroredSources.length > 0) {
+                    var _thisMap = this;
+                    $(this.errorDiv)
+                        .text("Layers in error - See console for details ")
+                        .append($("<button>Retry</button>").click(function() {
+                            _thisMap.erroredSources.forEach(function(src) {
+                                src.clear();
+                            })
+                        }))
+                    this.errorDiv.style.display = '';
+                } else {
+                    this.errorDiv.style.display = 'none';
                 }
             }
         });
@@ -340,6 +367,19 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         var layerEnds = function(event) {
             var loadingObj = event.tile || event.target || this;
+
+
+            var es_idx = _this.erroredSources.indexOf(loadingObj);
+            if (this.getState() == ol.source.State.ERROR) {
+                if (es_idx == -1)
+                    _this.erroredSources.push(loadingObj);
+                _this.dispatchEvent("change:erroredSource");
+            } else {
+                if (es_idx >= 0) {
+                    _this.erroredSources.splice(es_idx, 1);
+                    _this.dispatchEvent("change:erroredSource")
+                }
+            }
 
             var pls_idx = _this.partiallyLoadedSources.indexOf(loadingObj);
             if (loadingObj.get('partial_load')) {
@@ -375,29 +415,25 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             {
                 layerError.call(this, e)
             }
-
-            var pls_idx = _this.partiallyLoadedSources.indexOf(this);
-            if (this.get('partial_load')) {
-                if (pls_idx == -1) {
-                    _this.partiallyLoadedSources.push(loadingObj);
-                    _this.dispatchEvent("change:partiallyLoaded");
-                }
-            } else {
-                if (pls_idx >= 0) {
-                    _this.partiallyLoadedSources.splice(pls_idx, 1);
-                    _this.dispatchEvent("change:partiallyLoaded")
-                }
-            }
         });
 
         layer.on('change:visible', function(e) {
             var pls_idx = _this.partiallyLoadedSources.indexOf(this.getSource());
             if (this.getVisible() && this.getSource().get('partial_load')) {
-                _this.partiallyLoadedSources.push(loadingObj);
+                _this.partiallyLoadedSources.push(this.getSource());
                 _this.dispatchEvent("change:partiallyLoaded");
             } else if (!this.getVisible() && pls_idx >= 0) {
                 _this.partiallyLoadedSources.splice(pls_idx, 1);
                 _this.dispatchEvent("change:partiallyLoaded")
+            }
+
+            var es_idx = _this.erroredSources.indexOf(this.getSource());
+            if (this.getVisible() && this.getSource().getState() == ol.source.State.ERROR) {
+                _this.erroredSources.push(this.getSource());
+                _this.dispatchEvent("change:erroredSource");
+            } else if (!this.getVisible() && es_idx >= 0) {
+                _this.erroredSources.splice(es_idx, 1);
+                _this.dispatchEvent("change:erroredSource")
             }
         });
 
@@ -434,7 +470,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
                 htmlContent += "<table>";
                 feature.getKeys().forEach(function(prop) {
-                    htmlContent += "<tr><td>" + prop + "</td><td>" + feature.get(prop) + "</td></tr></div>"
+                    htmlContent += "<tr><td class='propKey'>" + prop + "</td><td class='propValue'>" + feature.get(prop) + "</td></tr></div>"
                 })
                 htmlContent += "</table>"
             } else {
@@ -1123,11 +1159,11 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                                                     ftLayer
                                                                         .getSource()
                                                                         .addFeatures(features);
-                                                                    ftLayer.getSource().setState(ol.source.State.READY);
 
                                                                     var moreToLoad = features.length >= MAX_FEATURES;
                                                                     ftLayer.getSource().set('partial_load', moreToLoad);
 
+                                                                    ftLayer.getSource().setState(ol.source.State.READY);
                                                                     return moreToLoad;
                                                                 }
                                                             ).catch(function (ex) {
@@ -1262,7 +1298,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                         var getOpName = openAPIclient.spec.paths['/'+candidate.name].get.operationId;
                                         return openAPIclient.apis.Features[getOpName](params).then(
                                             function (result) {
-
+                                                if (result.parseError) {
+                                                    throw "Parse Error: "+result.parseError.message;
+                                                }
                                                 // make sure we have IDs for every feature
                                                 result.obj.features.forEach(function(jsonFeature) {
                                                     if (jsonFeature.id === undefined) {
@@ -1290,14 +1328,13 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                                 ftLayer.getSource().set('partial_load', moreToLoad);
                                                 ftLayer.getSource().setState(ol.source.State.READY);
 
-
                                                 return moreToLoad
                                             }
                                         ).catch(function (ex) {
-                                                ftLayer.getSource().setState(ol.source.State.ERROR);
-                                                console.warn("GetFeatures failed");
-                                                console.warn(ex);
-                                            })
+                                            ftLayer.getSource().setState(ol.source.State.ERROR);
+                                            ftLayer.getSource().set("error", ex);
+                                            console.warn("GetFeatures failed on "+ftLayer.getSource().get('name')+": "+ex);
+                                        })
                                     },
                                     strategy: ol.loadingstrategy.bbox
                                 }),
