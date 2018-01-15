@@ -328,6 +328,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                         .text("Layers in error - See console for details ")
                         .append($("<button>Retry</button>").click(function() {
                             _thisMap.erroredSources.forEach(function(src) {
+                                src.setState(ol.source.State.READY);
                                 src.clear();
                             })
                         }))
