@@ -289,13 +289,13 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         this.loadingDiv = options.loadingDiv
         if (this.loadingDiv === undefined) {
-            this.loadingDiv = $("<div class='loader' style='font-size: 10px; margin: 40px 40px; z-index: 3000; position: absolute; top: 0px;'></div>")[0]
+            this.loadingDiv = $("<div class='loader' style='font-size: 10px; margin: 40px 40px; z-index: 50; position: absolute; top: 0px;'></div>")[0]
         }
         this.loadingListener = options.loadingListener
 
         this.loadingDiv && this.getViewport().appendChild(this.loadingDiv);
 
-        var msgContainer = $("<div style='position: absolute; z-index: 3000; left: 10px; top:10px;'></div>").appendTo(this.getViewport());
+        var msgContainer = $("<div style='position: absolute; z-index: 50; left: 60px; top:10px;'></div>").appendTo(this.getViewport());
         this.errorDiv && msgContainer.append(this.errorDiv);
         this.msgDiv && msgContainer.append(this.msgDiv);
 
@@ -383,7 +383,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             }
 
             var pls_idx = _this.partiallyLoadedSources.indexOf(loadingObj);
-            if (loadingObj.get('partial_load')) {
+            if (loadingObj.get && loadingObj.get('partial_load')) {
                 if (pls_idx == -1)
                     _this.partiallyLoadedSources.push(loadingObj);
                     _this.dispatchEvent("change:partiallyLoaded");
@@ -448,6 +448,74 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     };
 
 
+    OL_HELPERS.FeatureDetailsControl = function(opt_options) {
+
+        var options = opt_options ? opt_options : {};
+
+        var element = document.createElement('DIV');
+        element.className = options.className !== undefined ? options.className : 'ol-feature-details';
+
+        var render = options.render ?
+            options.render : OL_HELPERS.FeatureDetailsControl.render;
+
+        ol.control.Control.call(this, {
+            element: element,
+            render: render,
+            target: options.target
+        });
+
+        ol.events.listen(
+            this,
+            ol.Object.getChangeEventType(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES),
+            this.handleFeaturesChanged,
+            this);
+
+    };
+    ol.inherits(OL_HELPERS.FeatureDetailsControl, ol.control.Control);
+
+    OL_HELPERS.FeatureDetailsControl.prototype.handleFeaturesChanged = function() {
+        this.render();
+    };
+
+    OL_HELPERS.FeatureDetailsControl.prototype.setFeatures = function(features) {
+        this.set(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES, features || []);
+    };
+
+    /**
+     * Update the mouseposition element.
+     * @param {ol.MapEvent} mapEvent Map event.
+     * @this {ol.control.MousePosition}
+     * @api
+     */
+    OL_HELPERS.FeatureDetailsControl.render = function() {
+        var htmlContent;
+
+        var selectedFeatures = this.get(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES) || [];
+
+        if (selectedFeatures && selectedFeatures.length > 0) {
+            var feature = selectedFeatures[0]; //TODO support multiple features
+
+            var layerTitle = feature && feature.layer && feature.layer.get('title')
+            htmlContent = "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
+
+            htmlContent += "<div class='content'><table>";
+            feature.getKeys().forEach(function(prop) {
+                htmlContent += "<tr><td class='propKey'>" + prop + "</td><td class='propValue'>" + feature.get(prop) + "</td></tr></div>"
+            })
+            htmlContent += "</table></div>";
+
+            $(this.element).html(htmlContent);
+        } else {
+            //TODO empty and hide ?
+            $(this.element).html('');
+        }
+
+    };
+
+    OL_HELPERS.FeatureDetailsControl.PROPERTIES = {
+        SELECTED_FEATURES : "selectedFeatures"
+    };
+
 
     OL_HELPERS.FeatureInfoOverlay = function(options) {
         ol.Overlay.call(this, options);
@@ -459,6 +527,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             popupContent.prop('isHovered', false)
         })
 
+        this.showDetails = options.showDetails;
         this.filter = options.filter;
         this.renderFeaturePopup = options.renderFeaturePopup || function(features, displayDetails) {
             var htmlContent;
@@ -545,7 +614,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                         clearTimeout(_this.displayDetailsTimeout)
                     _this.hoveredFeatures = features;
                     _this.setFeatures(_this.hoveredFeatures);
-                    _this.displayDetailsTimeout = setTimeout(function() {_this.setFeatures(_this.hoveredFeatures, true);}, 500);
+                    if (_this.showDetails)
+                        _this.displayDetailsTimeout = setTimeout(function() {_this.setFeatures(_this.hoveredFeatures, true);}, 500);
                 }
 
                 if (_this.hoveredFeatures.length > 0) {
