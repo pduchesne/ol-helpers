@@ -1355,63 +1355,94 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                             var geojsonFormat = new ol.format.GeoJSON({
                                 defaultDataProjection: OL_HELPERS.EPSG4326
                             });
-                            var ftLayer = new ol.layer.Vector({
-                                title: candidate.title,
-                                source: new ol.source.Vector({
-                                    loader: function (extent, resolution, mapProjection) {
 
-                                        var bbox4326 = ol.proj.transformExtent(extent, mapProjection, OL_HELPERS.EPSG4326)
+                            var ftSource = new ol.source.Vector({
+                                loader: function (extent, resolution, mapProjection) {
 
-                                        var params = {
-                                            f: 'json',
-                                            count: MAX_FEATURES,
-                                            bbox: bbox4326.join(',')
-                                        }
+                                    var bbox4326 = ol.proj.transformExtent(extent, mapProjection, OL_HELPERS.EPSG4326)
 
-                                        this.setState(ol.source.State.LOADING);
-                                        var getOpName = openAPIclient.spec.paths['/'+candidate.name].get.operationId;
-                                        return openAPIclient.apis.Features[getOpName](params).then(
-                                            function (result) {
-                                                if (result.parseError) {
-                                                    throw "Parse Error: "+result.parseError.message;
-                                                }
-                                                // make sure we have IDs for every feature
-                                                result.obj.features.forEach(function(jsonFeature) {
-                                                    if (jsonFeature.id === undefined) {
-                                                        if (jsonFeature.ID) {
-                                                            jsonFeature.id = jsonFeature.ID;
-                                                        } else {
-                                                            // generate fid from properties hash to avoid multiple insertion of same feature
-                                                            // (when max_features strategy is applied and features have no intrisic ID)
-                                                            var hashkey = JSON.stringify(jsonFeature);
-                                                            jsonFeature.id = hashkey;
-                                                        }
-                                                    }
-                                                })
+                                    var params = {
+                                        f: 'json',
+                                        count: MAX_FEATURES,
+                                        bbox: bbox4326.join(',')
+                                    }
 
-                                                var features = geojsonFormat.readFeatures(
-                                                        result.obj || [], // content is undefined when no result (?!)
-                                                    {featureProjection: mapProjection,
-                                                        dataProjection: OL_HELPERS.EPSG4326})
-
-                                                ftLayer
-                                                    .getSource()
-                                                    .addFeatures(features);
-
-                                                var moreToLoad = features.length >= MAX_FEATURES;
-                                                ftLayer.getSource().set('partial_load', moreToLoad);
-                                                ftLayer.getSource().setState(ol.source.State.READY);
-
-                                                return moreToLoad
+                                    this.setState(ol.source.State.LOADING);
+                                    var getOpName = openAPIclient.spec.paths['/'+candidate.name].get.operationId;
+                                    return openAPIclient.apis.Features[getOpName](params).then(
+                                        function (result) {
+                                            if (result.parseError) {
+                                                throw "Parse Error: "+result.parseError.message;
                                             }
-                                        ).catch(function (ex) {
+                                            // make sure we have IDs for every feature
+                                            result.obj.features.forEach(function(jsonFeature) {
+                                                if (jsonFeature.id === undefined) {
+                                                    if (jsonFeature.ID) {
+                                                        jsonFeature.id = jsonFeature.ID;
+                                                    } else {
+                                                        // generate fid from properties hash to avoid multiple insertion of same feature
+                                                        // (when max_features strategy is applied and features have no intrisic ID)
+                                                        var hashkey = JSON.stringify(jsonFeature);
+                                                        jsonFeature.id = hashkey;
+                                                    }
+                                                }
+                                            })
+
+                                            var features = geojsonFormat.readFeatures(
+                                                    result.obj || [], // content is undefined when no result (?!)
+                                                {featureProjection: mapProjection,
+                                                    dataProjection: OL_HELPERS.EPSG4326})
+
+                                            ftLayer
+                                                .getSource()
+                                                .addFeatures(features);
+
+                                            var moreToLoad = features.length >= MAX_FEATURES;
+                                            ftLayer.getSource().set('partial_load', moreToLoad);
+                                            ftLayer.getSource().setState(ol.source.State.READY);
+
+                                            return moreToLoad
+                                        }
+                                    ).catch(function (ex) {
                                             ftLayer.getSource().setState(ol.source.State.ERROR);
                                             ftLayer.getSource().set("error", ex);
                                             console.warn("GetFeatures failed on "+ftLayer.getSource().get('name')+": "+ex);
                                         })
-                                    },
-                                    strategy: ol.loadingstrategy.bbox
-                                }),
+                                },
+                                strategy: ol.loadingstrategy.bbox
+                            })
+
+                            ftSource.getFeatureById = function(id) {
+                                var getFeatureByIdOpName = openAPIclient.spec.paths['/'+candidate.name+'/{id}'].get.operationId;
+                                var promise = $.Deferred();
+                                openAPIclient.apis.Features[getFeatureByIdOpName]({id: id, f: 'json'}).then(
+                                    function (result) {
+                                        if (result.parseError) {
+                                            throw "Parse Error: "+result.parseError.message;
+                                        }
+
+                                        // make sure we have IDs for every feature
+                                        if (result.obj.id === undefined && result.obj.ID)
+                                            result.obj.id = result.obj.ID;
+
+                                        var features = geojsonFormat.readFeatures(
+                                                result.obj || [], // content is undefined when no result (?!)
+                                            {featureProjection: map.getView().getProjection(),
+                                                dataProjection: OL_HELPERS.EPSG4326})
+
+                                        promise.resolve(features.length>0 && features[0]);
+                                    }
+                                ).catch(function (ex) {
+                                        console.warn("GetFeatureById failed on "+ftLayer.getSource().get('name')+" / "+id+" : "+ex);
+                                        promise.reject(ex);
+                                    })
+
+                                return promise;
+                            }
+
+                            var ftLayer = new ol.layer.Vector({
+                                title: candidate.title,
+                                source: ftSource,
                                 visible: idx == 0
                             });
                             // override getExtent to take advertised bbox into account first
