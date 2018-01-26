@@ -14,7 +14,8 @@
   overflow: auto;
 }
 .ol-viewport .ol-feature-details div.featureDetails > div {
-  padding: 3px;
+  padding: 6px;
+  text-align: left;
 }
 .ol-viewport .ol-feature-details div.featureDetails > .content > table {
   margin: 3px;
@@ -28,8 +29,6 @@
   text-align: left;
 }
 .ol-viewport .ol-feature-details div.featureDetails > .name {
-  padding-left: 6px;
-  text-align: left;
   position: sticky;
   top: 0px;
   background-color: rgba(0, 0, 0, 0.75);
