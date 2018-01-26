@@ -495,17 +495,18 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         var selectedFeatures = this.get(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES) || [];
 
-        // start by emptying the parent element anyway
-        var container = $(this.element).empty();
+        var container = $(this.element)
 
         var _thisControl = this;
         if (selectedFeatures && selectedFeatures.length > 0) {
-            selectedFeatures.forEach(function(f) {
+            var detailsArr = selectedFeatures.map(function(f) {
                 var $details = $("<div class='featureDetails'></div>")
                     .prop('feature', f)
-                    .appendTo(container);
                 _thisControl.renderFeature(f, $details)
+
+                return $details;
             })
+            container.empty().append(detailsArr);
         } else {
 
         }
