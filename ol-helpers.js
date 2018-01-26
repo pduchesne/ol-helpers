@@ -464,6 +464,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             target: options.target
         });
 
+        this.renderFeature = options.renderFeature ?
+            options.renderFeature : OL_HELPERS.FeatureDetailsControl.renderFeature;
+
         ol.events.listen(
             this,
             ol.Object.getChangeEventType(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES),
@@ -492,8 +495,27 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         var selectedFeatures = this.get(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES) || [];
 
+        // start by emptying the parent element anyway
+        var container = $(this.element).empty();
+
+        var _thisControl = this;
         if (selectedFeatures && selectedFeatures.length > 0) {
-            var feature = selectedFeatures[0]; //TODO support multiple features
+            selectedFeatures.forEach(function(f) {
+                var $details = $("<div class='featureDetails'></div>")
+                    .prop('feature', f)
+                    .appendTo(container);
+                _thisControl.renderFeature(f, $details)
+            })
+        } else {
+
+        }
+
+    };
+
+    OL_HELPERS.FeatureDetailsControl.renderFeature = function(feature, container) {
+        var htmlContent;
+
+        if (feature) {
 
             var layerTitle = feature && feature.layer && feature.layer.get('title')
             htmlContent = "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
@@ -504,10 +526,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             })
             htmlContent += "</table></div>";
 
-            $(this.element).html(htmlContent);
+            $(container).append($(htmlContent));
         } else {
-            //TODO empty and hide ?
-            $(this.element).html('');
+            // return undefined
         }
 
     };
@@ -598,16 +619,17 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 var changed = false;
                 var features = [];
                 map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
-                    if (feature && (!_this.filter || _this.filter(feature, layer))) // sometimes feature is undefined (?!)
-                        features.push(feature);
-                    feature.layer = layer
-                    if (_this.hoveredFeatures.indexOf(feature)<0) {
-                        changed = true
+                    if (layer != null) { // null layer is from unmanaged layers, presumably form Select interaction
+                        if (feature && (!_this.filter || _this.filter(feature, layer))) // sometimes feature is undefined (?!)
+                            features.push(feature);
+                        feature.layer = layer
+                        if (_this.hoveredFeatures.indexOf(feature) < 0) {
+                            changed = true
+                        }
                     }
                 });
 
-                if (features.length != _this.hoveredFeatures.length)
-                    changed = true
+                changed = !$_.isEqual(features, _this.hoveredFeatures)
 
                 if (changed) {
                     if (_this.displayDetailsTimeout)
