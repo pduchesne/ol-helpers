@@ -1172,107 +1172,161 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
                                                     gmlFormat: gmlFormat
                                                 })
+
+
+                                                var ftSource = new ol.source.Vector({
+                                                    loader: function (extent, resolution, mapProjection) {
+
+                                                        var bbox;
+                                                        if (ver != '1.0.0') {
+                                                            // let's set the bbox srs explicitly to avoid default behaviours among server impls
+
+                                                            if (ol.proj.equivalent(mapProjection, OL_HELPERS.EPSG4326)
+                                                            // apparently 4326 extents from map.view are always in lon/lat already
+                                                            //&& mapProjection.getAxisOrientation() == 'enu'
+                                                                ) {
+                                                                // the current bbox is expressed in lon/lat --> flip axis
+                                                                extent = [extent[1], extent[0], extent[3], extent[2]];
+
+                                                                bbox = extent.join(',') + ',' + OL_HELPERS.EPSG4326_LONG.getCode()
+                                                            } else {
+                                                                bbox = extent.join(',') + ',' + mapProjection.getCode()
+                                                            }
+                                                        } else {
+                                                            bbox = extent.join(',')
+                                                        }
+
+                                                        var params = {
+                                                            service: 'WFS',
+                                                            version: ver,
+                                                            request: 'GetFeature',
+                                                            maxFeatures: MAX_FEATURES,
+                                                            typename: candidate.name, /* TODO deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                                                            srsname: resolvedSrs.getCode(),
+                                                            /* explicit SRS must be provided here, as some impl (geoserver)
+                                                             take lat/lon axis order by default.
+                                                             EPSG:4326 enforces lon/lat order */
+                                                            /* TODO check if map proj is compatible with WFS
+                                                             some versions/impls need always 4326 bbox
+                                                             do on-the-fly reprojection if needed */
+                                                            bbox: bbox,
+                                                            // some WFS have wrong axis order if GML3
+                                                            outputFormat: gmlFormatVersion
+                                                        }
+
+                                                        ftLayer.getSource().setState(ol.source.State.LOADING)
+
+                                                        return fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + kvp2string(params),
+                                                            {method:'GET', credentials: 'include'}
+                                                        ).then(
+                                                            function (response) {
+                                                                if (!response.ok)
+                                                                    throw "GetFeatures failed: "+response.statusText;
+                                                                else
+                                                                    return response.text();
+                                                            }
+                                                        ).then(
+                                                            function (text) {
+                                                                var features = format.readFeatures(text, {featureProjection: mapProjection, dataProjection: resolvedSrs})
+                                                                /* This is no longer needed as axis order is forced to lon/lat in format.GML
+                                                                 if (!isLatLon && ol.proj.equivalent(resolvedSrs, OL_HELPERS.EPSG4326)) {
+                                                                 // OL3+ only supports xy. --> reverse axis order if not native latLon
+                                                                 for (var i = 0; i < features.length; i++) {
+                                                                 features[i].getGeometry().applyTransform(function (coords, coords2, stride) {
+                                                                 for (var j = 0; j < coords.length; j += stride) {
+                                                                 var y = coords[j];
+                                                                 var x = coords[j + 1];
+                                                                 coords[j] = x;
+                                                                 coords[j + 1] = y;
+                                                                 }
+                                                                 });
+                                                                 }
+                                                                 }
+                                                                 */
+
+                                                                // generate fid from properties hash to avoid multiple insertion of same feature
+                                                                // (when max_features strategy is applied and features have no intrisic ID)
+                                                                features.forEach(function(feature) {
+                                                                    if (feature.getId() === undefined) {
+                                                                        var hashkey = new ol.format.GeoJSON().writeFeature(feature).hashCode();
+                                                                        feature.setId(hashkey);
+                                                                    }
+                                                                })
+
+                                                                ftLayer
+                                                                    .getSource()
+                                                                    .addFeatures(features);
+
+                                                                var moreToLoad = features.length >= MAX_FEATURES;
+                                                                ftLayer.getSource().set('partial_load', moreToLoad);
+
+                                                                ftLayer.getSource().setState(ol.source.State.READY);
+                                                                return moreToLoad;
+                                                            }
+                                                        ).catch(function (ex) {
+                                                                ftLayer.getSource().setState(ol.source.State.ERROR);
+                                                                ftLayer.getSource().set("error", ex);
+                                                                console.warn("GetFeatures failed on "+ftLayer.getSource().get('name')+": "+ex);
+                                                                console.warn(ex);
+                                                            })
+                                                    },
+                                                    strategy: ol.loadingstrategy.bbox,
+                                                    projection: resolvedSrs // is this needed ?
+                                                    //maxExtent:
+                                                })
+
+                                                ftSource.getFeatureById = function(id) {
+                                                    var promise = $.Deferred();
+
+                                                    var params = {
+                                                        service: 'WFS',
+                                                        version: ver,
+                                                        request: 'GetFeature',
+                                                        typename: candidate.name, /* TODO deal with WFS that require the prefix to be included : $candidate.prefixedName*/
+                                                        featureID: id,
+                                                        srsname: resolvedSrs.getCode(),
+                                                        outputFormat: gmlFormatVersion
+                                                    }
+
+                                                    fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + kvp2string(params),
+                                                        {method:'GET', credentials: 'include'}
+                                                    ).then(
+                                                        function (response) {
+                                                            if (!response.ok)
+                                                                throw "GetFeatures failed: "+response.statusText;
+                                                            else
+                                                                return response.text();
+                                                        }
+                                                    ).then(
+                                                        function (text) {
+                                                            var features = format.readFeatures(text, {featureProjection: map.getView().getProjection(), dataProjection: resolvedSrs})
+
+                                                            // generate fid from properties hash to avoid multiple insertion of same feature
+                                                            // (when max_features strategy is applied and features have no intrisic ID)
+                                                            features.forEach(function(feature) {
+                                                                if (feature.getId() === undefined) {
+                                                                    var hashkey = new ol.format.GeoJSON().writeFeature(feature).hashCode();
+                                                                    feature.setId(hashkey);
+                                                                }
+                                                            })
+
+                                                            if (features.length == 1)
+                                                                promise.resolve(features[0]);
+                                                            else
+                                                                promise.reject("Wrong number of features: "+features.length);
+                                                        }
+                                                    ).catch(function (ex) {
+                                                            console.warn("GetFeatureById failed on "+ftLayer.getSource().get('name')+" / "+id+" : "+ex);
+                                                            console.warn(ex);
+                                                            promise.reject(ex);
+                                                        })
+
+                                                    return promise;
+                                                }
+
                                                 ftLayer = new ol.layer.Vector({
                                                     title: candidate.title,
-                                                    source: new ol.source.Vector({
-                                                        loader: function (extent, resolution, mapProjection) {
-
-                                                            var bbox;
-                                                            if (ver != '1.0.0') {
-                                                                // let's set the bbox srs explicitly to avoid default behaviours among server impls
-
-                                                                if (ol.proj.equivalent(mapProjection, OL_HELPERS.EPSG4326)
-                                                                // apparently 4326 extents from map.view are always in lon/lat already
-                                                                //&& mapProjection.getAxisOrientation() == 'enu'
-                                                                    ) {
-                                                                    // the current bbox is expressed in lon/lat --> flip axis
-                                                                    extent = [extent[1], extent[0], extent[3], extent[2]];
-
-                                                                    bbox = extent.join(',') + ',' + OL_HELPERS.EPSG4326_LONG.getCode()
-                                                                } else {
-                                                                    bbox = extent.join(',') + ',' + mapProjection.getCode()
-                                                                }
-                                                            } else {
-                                                                bbox = extent.join(',')
-                                                            }
-
-                                                            var params = {
-                                                                service: 'WFS',
-                                                                version: ver,
-                                                                request: 'GetFeature',
-                                                                maxFeatures: MAX_FEATURES,
-                                                                typename: candidate.name, /* TODO deal with WFS that require the prefix to be included : $candidate.prefixedName*/
-                                                                srsname: resolvedSrs.getCode(),
-                                                                /* explicit SRS must be provided here, as some impl (geoserver)
-                                                                 take lat/lon axis order by default.
-                                                                 EPSG:4326 enforces lon/lat order */
-                                                                /* TODO check if map proj is compatible with WFS
-                                                                 some versions/impls need always 4326 bbox
-                                                                 do on-the-fly reprojection if needed */
-                                                                bbox: bbox,
-                                                                // some WFS have wrong axis order if GML3
-                                                                outputFormat: gmlFormatVersion
-                                                            }
-
-                                                            ftLayer.getSource().setState(ol.source.State.LOADING)
-
-                                                            return fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + kvp2string(params),
-                                                                {method:'GET', credentials: 'include'}
-                                                            ).then(
-                                                                function (response) {
-                                                                    if (!response.ok)
-                                                                        throw "GetFeatures failed: "+response.statusText;
-                                                                    else
-                                                                        return response.text();
-                                                                }
-                                                            ).then(
-                                                                function (text) {
-                                                                    var features = format.readFeatures(text, {featureProjection: mapProjection, dataProjection: resolvedSrs})
-                                                                    /* This is no longer needed as axis order is forced to lon/lat in format.GML
-                                                                     if (!isLatLon && ol.proj.equivalent(resolvedSrs, OL_HELPERS.EPSG4326)) {
-                                                                     // OL3+ only supports xy. --> reverse axis order if not native latLon
-                                                                     for (var i = 0; i < features.length; i++) {
-                                                                     features[i].getGeometry().applyTransform(function (coords, coords2, stride) {
-                                                                     for (var j = 0; j < coords.length; j += stride) {
-                                                                     var y = coords[j];
-                                                                     var x = coords[j + 1];
-                                                                     coords[j] = x;
-                                                                     coords[j + 1] = y;
-                                                                     }
-                                                                     });
-                                                                     }
-                                                                     }
-                                                                     */
-
-                                                                    // generate fid from properties hash to avoid multiple insertion of same feature
-                                                                    // (when max_features strategy is applied and features have no intrisic ID)
-                                                                    features.forEach(function(feature) {
-                                                                        if (feature.getId() === undefined) {
-                                                                            var hashkey = new ol.format.GeoJSON().writeFeature(feature).hashCode();
-                                                                            feature.setId(hashkey);
-                                                                        }
-                                                                    })
-
-                                                                    ftLayer
-                                                                        .getSource()
-                                                                        .addFeatures(features);
-
-                                                                    var moreToLoad = features.length >= MAX_FEATURES;
-                                                                    ftLayer.getSource().set('partial_load', moreToLoad);
-
-                                                                    ftLayer.getSource().setState(ol.source.State.READY);
-                                                                    return moreToLoad;
-                                                                }
-                                                            ).catch(function (ex) {
-                                                                    ftLayer.getSource().setState(ol.source.State.ERROR);
-                                                                    console.warn("GetFeatures failed");
-                                                                    console.warn(ex);
-                                                                })
-                                                        },
-                                                        strategy: ol.loadingstrategy.bbox,
-                                                        projection: resolvedSrs // is this needed ?
-                                                        //maxExtent:
-                                                    }),
+                                                    source: ftSource,
                                                     visible: idx == 0
                                                 });
                                                 // override getExtent to take advertised bbox into account first
