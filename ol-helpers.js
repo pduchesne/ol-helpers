@@ -467,11 +467,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         this.renderFeature = options.renderFeature ?
             options.renderFeature : OL_HELPERS.FeatureDetailsControl.renderFeature;
 
-        ol.events.listen(
-            this,
-            ol.Object.getChangeEventType(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES),
-            this.handleFeaturesChanged,
-            this);
+
+        this.on('change:'+OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES, this.handleFeaturesChanged);
 
     };
     ol.inherits(OL_HELPERS.FeatureDetailsControl, ol.control.Control);
