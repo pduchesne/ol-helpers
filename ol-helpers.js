@@ -307,8 +307,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 if (this.partiallyLoadedSources.length > 0) {
                     var _thisMap = this;
                     $(this.msgDiv)
-                        .text("Partial load - zoom in for more ")
-                        .append($("<button>Refresh</button>").click(function() {
+                        .text("More features to load ")
+                        .append($("<button>Reload in current view</button>").click(function() {
                             _thisMap.partiallyLoadedSources.forEach(function(src) {
                                 src.clear();
                             })
