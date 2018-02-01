@@ -160,8 +160,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 });
             }
 
-            loading.then(zoomToExtent)
-
+            return loading.then(zoomToExtent)
         }
 
     }
