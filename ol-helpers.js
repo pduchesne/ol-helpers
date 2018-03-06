@@ -91,7 +91,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
     // Establish the root object, `window` in the browser, or `global` on the server.
     var root = this;
-    var OL_HELPERS = root.OL_HELPERS = {}
+    var OL_HELPERS = root.OL_HELPERS = {
+        // this is currently used only for geojson parsing
+        FEATURE_GEOM_PROP : '_HILATS_Geometry'
+    };
 
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
 
@@ -518,8 +521,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             htmlContent = "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
 
             htmlContent += "<div class='content'><table>";
+            var geomName = feature.getGeometryName();
             feature.getKeys().forEach(function(prop) {
-                htmlContent += "<tr><td class='propKey'>" + prop + "</td><td class='propValue'>" + feature.get(prop) + "</td></tr></div>"
+                if (prop != geomName)
+                    htmlContent += "<tr><td class='propKey'>" + prop + "</td><td class='propValue'>" + feature.get(prop) + "</td></tr></div>"
             })
             htmlContent += "</table></div>";
 
@@ -1426,6 +1431,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                             deferredLayers.push(deferredLayer);
 
                             var geojsonFormat = new ol.format.GeoJSON({
+                                // avoid collision with potential geojson properties named 'geometry'
+                                // cf https://stackoverflow.com/questions/32746143/geojson-with-a-geometry-property-in-ol3
+                                geometryName: OL_HELPERS.FEATURE_GEOM_PROP,
                                 defaultDataProjection: OL_HELPERS.EPSG4326
                             });
 
@@ -1737,6 +1745,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     OL_HELPERS.createGeoJSONLayer = function (url) {
 
         var geojsonFormat = new ol.format.GeoJSON({
+            // avoid collision with potential geojson properties named 'geometry'
+            // cf https://stackoverflow.com/questions/32746143/geojson-with-a-geometry-property-in-ol3
+            geometryName: OL_HELPERS.FEATURE_GEOM_PROP,
             defaultDataProjection: OL_HELPERS.EPSG4326
         });
 
