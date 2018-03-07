@@ -308,13 +308,22 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             if (this.msgDiv) {
                 if (this.partiallyLoadedSources.length > 0) {
                     var _thisMap = this;
-                    $(this.msgDiv)
+                    var msgDiv = $(this.msgDiv)
                         .text("More features to load ")
                         .append($("<button>Reload in current view</button>").click(function() {
                             _thisMap.partiallyLoadedSources.forEach(function(src) {
                                 src.clear();
                             })
                         }))
+                    _thisMap.partiallyLoadedSources.forEach(function(src) {
+                        if (src.get('next_page')) {
+                            msgDiv.append($("<button>Next page</button>").click(function() {
+                                _thisMap.partiallyLoadedSources.forEach(function(src) {
+                                    src.nextPage();
+                                })
+                            }))
+                        }
+                    })
                     this.msgDiv.style.display = '';
                 } else {
                     this.msgDiv.style.display = 'none';
@@ -1762,11 +1771,19 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var geojsonLoader =
             function(extent, resolution, projection) {
 
-                $.ajax({url: url, dataType: 'json', success: function(response) {
+                $.ajax({url: geojson.getSource().url, dataType: 'json', success: function(response) {
                     if (!response || response.error) {
                         //TODO
                     } else {
                         var source = response
+
+                        if (response.links) {
+                            var nextLink = response.links.find(function(link) {return link.rel == 'next' });
+                            if (nextLink && nextLink.href) {
+                                geojson.getSource().set('partial_load', true);
+                                geojson.getSource().set('next_page', nextLink.href);
+                            }
+                        }
 
                         var features = geojsonFormat.readFeatures(source,
                             {featureProjection: projection})
@@ -1787,6 +1804,15 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 format: geojsonFormat
             })
         });
+        geojson.getSource().url = url;
+        geojson.getSource().nextPage = function() {
+            if (this.get('next_page')) {
+                this.url = this.get('next_page');
+                //TODO must find a way to append features
+                geojson.getSource().clear();
+            }
+        };
+
 
         geojson.getSource().set('waitingOnFirstData', true);
 
