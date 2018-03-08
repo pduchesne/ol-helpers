@@ -1420,6 +1420,20 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 proxifyFn && function(req) {
                     req.url = proxifyFn(req.url);
                     return req;
+                },
+
+            responseInterceptor:
+                function(resp) {
+                    if (resp.body && !resp.body.servers) {
+                        // hack to deal with servers not returning servers block
+                        var serverUrl = decodeURIComponent(OL_HELPERS.parseURL(proxyUri).query._uri);
+                        var apiIdx = serverUrl.indexOf("/api");
+                        serverUrl = serverUrl.substring(0, apiIdx);
+                        resp.body.servers = [{
+                            url: serverUrl
+                        }]
+                    }
+                    return resp;
                 }
             })
             .then (function(openAPIclient) {
@@ -1436,6 +1450,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                         var deferredLayers = []
 
                         candidates.forEach(function (candidate, idx) {
+                            if (!candidate.name)
+                                candidate.name = candidate.collectionId;
+
                             var deferredLayer = $.Deferred();
                             deferredLayers.push(deferredLayer);
 
