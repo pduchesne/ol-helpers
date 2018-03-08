@@ -1522,10 +1522,17 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                             ftSource.getFeatureById = function(id) {
                                 var getFeatureByIdOpName = openAPIclient.spec.paths['/'+candidate.name+'/{id}'].get.operationId;
                                 var promise = $.Deferred();
-                                openAPIclient.apis.Features[getFeatureByIdOpName]({id: id, f: 'json'}).then(
+                                // try both the 'Features' and 'Feature' tags. Not sure which one is correct, check the spec.
+                                (openAPIclient.apis.Features[getFeatureByIdOpName] || openAPIclient.apis.Feature[getFeatureByIdOpName]) ({id: id, f: 'json'}).then(
                                     function (result) {
                                         if (result.parseError) {
                                             throw "Parse Error: "+result.parseError.message;
+                                        }
+
+                                        if (!result.obj.type == 'FeatureCollection' || result.obj.features ) {
+                                            if (!result.obj.features)
+                                                throw "Results advertised as FeatureCollection, but not containing a 'features' array"
+                                            result.obj = result.obj.features[0];
                                         }
 
                                         // make sure we have IDs for every feature
