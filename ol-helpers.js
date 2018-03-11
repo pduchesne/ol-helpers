@@ -139,7 +139,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                     projectedBbox = layer.getSource().getExtent && layer.getSource().getExtent();
                 }
 
-                if (isNumeric(projectedBbox[0]) &&
+                // sometimes the capabilities are wrong and the bbox is absent
+                if (projectedBbox &&
+                    isNumeric(projectedBbox[0]) &&
                     isNumeric(projectedBbox[1]) &&
                     isNumeric(projectedBbox[2]) &&
                     isNumeric(projectedBbox[3]))
