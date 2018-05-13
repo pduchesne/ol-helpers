@@ -809,6 +809,38 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
     }
 
+    var parseGeoPackage = function (url, callback, failCallback) {
+
+        /*
+        var GeoPackage = GeoPackageAPI.GeoPackage
+            , GeoPackageManager = GeoPackageAPI.GeoPackageManager
+            , GeoPackageConnection = GeoPackageAPI.GeoPackageConnection
+            , GeoPackageTileRetriever = GeoPackageAPI.GeoPackageTileRetriever
+            , TileBoundingBoxUtils = GeoPackageAPI.TileBoundingBoxUtils
+            , BoundingBox = GeoPackageAPI.BoundingBox;
+            */
+
+        fetch(url,
+            {method:'GET', credentials: 'include'}
+        ).then(
+            function(response) {
+                return response.arrayBuffer();
+            }
+        ).then(
+            function(arrayBuffer) {
+                var uInt8Array = new Uint8Array(arrayBuffer);
+                geopackage.openGeoPackageByteArray(uInt8Array, function(err, geopackage) {
+                    callback(geopackage)
+                });
+
+            }
+        ).catch(failCallback || function(ex) {
+                console.warn("Trouble reading geopackage");
+                console.warn(ex);
+            })
+
+    }
+
     OL_HELPERS.parseWMTSCapas = function (url, callback, failCallback) {
         var wmtsFormat = new ol.format.WMTSCapabilities();
         var params = {
@@ -1867,6 +1899,72 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         return esrijson
     }
 
+    OL_HELPERS.withGeoPackageLayers = function (url, layerProcessor, layerName, layerBaseUrl, map) {
+
+        var deferredResult = $.Deferred()
+
+        var deferredLayers = []
+
+        parseGeoPackage(
+            url,
+            function (geoPackage) {
+
+
+                async.parallel([
+                    function(callback) {
+                        geoPackage.getTileTables(function(err, tables) {
+                            async.eachSeries(tables, function(table, callback) {
+                                geoPackage.getTileDaoWithTableName(table, function(err, tileDao) {
+                                    geoPackage.getInfoForTable(tileDao, function(err, info) {
+                                        /*
+                                        var deferredLayer = $.Deferred();
+                                        deferredLayers.push(deferredLayer);
+                                        var newLayer = OL_HELPERS.createGeoPackageTileLayer(info, true, map)
+                                        layerProcessor(newLayer);
+
+                                        //TODO deal with err
+
+                                        deferredLayer.resolve(newLayer);
+                                        */
+                                        callback();
+                                    });
+                                });
+                            }, callback);
+                        });
+                    }, function(callback) {
+                        var first = true;
+                        geoPackage.getFeatureTables(function(err, tables) {
+                            async.eachSeries(tables, function(table, callback) {
+                                geoPackage.getFeatureDaoWithTableName(table, function(err, featureDao) {
+                                    geoPackage.getInfoForTable(featureDao, function(err, info) {
+                                        var deferredLayer = $.Deferred();
+                                        deferredLayers.push(deferredLayer);
+                                        var newLayer = OL_HELPERS.createGeoPackageFeatureLayer(geoPackage, info, first, map);
+                                        first = false;
+                                        layerProcessor(newLayer);
+
+                                        //TODO deal with err
+
+                                        deferredLayer.resolve(newLayer);
+                                        callback();
+                                    });
+                                });
+                            }, callback);
+                        });
+                    }
+                ], function() {
+                    $.when.apply($, deferredLayers).then(function() {
+                        deferredResult.resolve(deferredLayers)
+                    })
+                });
+
+            }
+        )
+        //TODO catch and reject
+
+        return deferredResult
+    }
+
     OL_HELPERS.withArcGisLayers = function (url, layerProcessor, layerName, layerBaseUrl, map) {
 
         var deferredResult = $.Deferred()
@@ -2068,6 +2166,98 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         return layer;
     }
+
+
+    OL_HELPERS.createGeoPackageFeatureLayer = function (geoPackage, gpFeatureTableInfo, visible, map) {
+
+        var geojsonFormat = new ol.format.GeoJSON({
+            // avoid collision with potential geojson properties named 'geometry'
+            // cf https://stackoverflow.com/questions/32746143/geojson-with-a-geometry-property-in-ol3
+            geometryName: OL_HELPERS.FEATURE_GEOM_PROP,
+            defaultDataProjection: OL_HELPERS.EPSG4326
+        });
+
+
+        // use a custom loader to set source state
+        var geopackageLoader =
+            function(extent, resolution, projection) {
+
+
+                geopackage.iterateGeoJSONFeaturesFromTable(
+                    geoPackage,
+                    gpFeatureTableInfo.tableName,
+                    /* feature callback */
+                    function(err, geoJson, done) {
+
+
+                        if (err) {
+                            layer.getSource().setState(ol.source.State.ERROR);
+                            console.warn("Geopackage readFeatures failed: "+err);
+                            return;
+                        }
+
+                        //TODO source projection?
+
+                        // generate fid from properties hash to avoid multiple insertion of same feature
+                        // (when max_features strategy is applied and features have no intrisic ID)
+                        /*
+                        features.forEach(function(feature) {
+                            if (feature.getId() === undefined) {
+                                if (feature.get("OBJECTID"))
+                                    feature.setId(feature.get("OBJECTID"));
+                                else {
+                                    var hashkey = new ol.format.GeoJSON().writeFeature(feature).hashCode();
+                                    feature.setId(hashkey);
+                                }
+                            }
+                        })
+                        */
+
+                        var feature = geojsonFormat.readFeature(geoJson, {featureProjection: projection});
+
+                        geopackageLayer.getSource().addFeature(feature);
+
+                        setTimeout(done, 0);
+                    },
+                    function() {
+                        // set source as ready once features are loaded
+                        geopackageLayer.getSource().set('waitingOnFirstData', false)
+                        geopackageLayer.getSource().setState(ol.source.State.READY);
+                    }
+                );
+            }
+
+        var geopackageLayer = new ol.layer.Vector({
+            title: gpFeatureTableInfo.tableName,
+            visible: visible,
+            source: new ol.source.Vector({
+                loader: function(extent, resolution, projection) {
+                    // set source as loading before reading the GeoJSON
+                    this.setState(ol.source.State.LOADING);
+                    return geopackageLoader.call(this, extent, resolution, projection)
+                }
+            })
+        });
+
+        geopackageLayer.getSource().getFeatureById = function(id) {
+            var promise = $.Deferred();
+
+            throw "not implemented";
+
+            return promise;
+        }
+
+        geopackageLayer.getSource().set('name', gpFeatureTableInfo.tableName);
+        // override getExtent to take advertised bbox into account first
+        /*
+        geopackageLayer.getSource().getFullExtent = function() {
+            throw "not implemented";
+        };
+        */
+
+        return geopackageLayer;
+    }
+
 
 
     OL_HELPERS.createLayerFromConfig = function(mapConfig, isBaseLayer, callback) {
