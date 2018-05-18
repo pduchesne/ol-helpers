@@ -2075,11 +2075,23 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var attribution;
 
 
-        if (mapConfig.type == 'OSM') {
+        if (! mapConfig.type) {
+            urls = 'http://tile.openstreetmap.org/{z}/{x}/{y}.png';
+            var baseMapLayer = new ol.layer.Tile(
+                {title: 'OSM',
+                    type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
+                    source:new ol.source.OSM({
+                        url: urls,
+                        attributions: 'Map tiles & Data by OpenStreetMap, under CC BY SA.'
+                    })
+                });
+
+            callback (baseMapLayer);
+        } else if (mapConfig.type.toLowerCase() == 'osm') {
             urls = mapConfig['url'];
 
             var baseMapLayer = new ol.layer.Tile(
-                {title: mapConfig['title'],
+                {title: mapConfig['title'] || 'OSM',
                     type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
                     source:new ol.source.OSM({
                         url: urls,
@@ -2088,6 +2100,19 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                        */
                     })
                 });
+
+            callback (baseMapLayer);
+
+        } else if (mapConfig.type.toLowerCase() == 'stamen') {
+            var layer = mapConfig['layer'] || 'watercolor';
+            var baseMapLayer = new ol.layer.Tile({
+                title: mapConfig['title'] || 'stamen',
+                type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
+                source: new ol.source.Stamen({
+                    layer: layer,
+                    attributions: 'Map tiles by <a href="http://stamen.com">Stamen Design</a> (<a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a>). Data by <a href="http://openstreetmap.org">OpenStreetMap</a> (<a href="http://creativecommons.org/licenses/by-sa/3.0">CC BY SA</a>)'
+                })
+            });
 
             callback (baseMapLayer);
 
@@ -2200,6 +2225,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             }
             callback (baseMapLayer);
 
+        } else {
+            throw "Unknown basemap type: "+ mapConfig.type;
         }
 
 
