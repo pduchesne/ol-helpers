@@ -461,6 +461,16 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     };
 
 
+    /**
+     * Options : {
+     *     className,
+     *     target,
+     *     render : () => {render all features} ,
+     *     renderFeature : (feature, $elem) => {render feature in $elem}
+     * }
+     * @param opt_options
+     * @constructor
+     */
     OL_HELPERS.FeatureDetailsControl = function(opt_options) {
 
         var options = opt_options ? opt_options : {};
@@ -2231,6 +2241,222 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
 
 
+    }
+
+
+    OL_HELPERS.SUPPORTED_MIME_TYPES = {
+        'kml': 'application/vnd.google-earth.kml+xml',
+        'gml': 'application/gml+xml',
+        'wms': 'application/vnd.ogc.wms_xml',
+        'wfs': 'application/vnd.ogc.wfs_xml',
+        'wfs3': 'application/vnd.ogc.wfs3',
+        'gpkg': 'application/vnd.opengeospatial.geopackage+sqlite3',
+        'wmts': 'service/wmts',
+        'arcgis_rest': 'application/vnd.esri.arcgis.rest',
+        'geojson' : 'application/geo+json',
+        'json' : 'application/json'
+    };
+
+    /**
+     * Adds layers from a URL to a map
+     * @param map map to add layers to
+     * @param url url of the layer(s) resource
+     * @param mimetype mime type of the URL
+     * @param proxifyFn optional fn to proxify URLs if needed and work around cross-domain issues; takes 2 arguments : url and boolean isImageUrl
+     * @param addLayerCallback callback to be called to add the layer to the map; must return a promise resolved when layer is added
+     */
+    OL_HELPERS.addLayersFromUrl = function(map, url, mimeType, proxifyFn, addLayerCallback) {
+
+        /*
+         mimeType = mimeType || _this.guessMimeType(uri)
+         var proxyUri = FRAGVIZ.UTILS.proxifyUrl(uri)
+         */
+
+
+        /*
+         var layers = _this.mapLayers = []
+         var layerAdder = function (layer) {
+         layer.set('isResourceLayer', true); // mark layer as part of displayedResource
+         layers.push(layer)
+         return map.addLayerWithExtent(layer)
+
+         //if (_this.annotationLayer)
+         //    map.setLayerIndex(_this.annotationLayer, map.getNumLayers());
+         }
+         */
+        var layerAdder = addLayerCallback || function (layer) {
+            return map.addLayerWithExtent(layer);
+        }
+
+
+        var deferredResult = $.Deferred()
+
+        // default proxifyFn is to return URL as is
+        proxifyFn = proxifyFn || function(url) {return url;}
+        var proxyUri = proxifyFn(url);
+
+        //TODO implement done and fail for synchronous calls too
+        if (OL_HELPERS.SUPPORTED_MIME_TYPES['kml'] == mimeType) {
+            return layerAdder(OL_HELPERS.createKMLLayer(proxyUri));
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["gml"] == mimeType) {
+            return layerAdder(OL_HELPERS.createGMLLayer(proxyUri));
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["geojson"] == mimeType || OL_HELPERS.SUPPORTED_MIME_TYPES["json"] == mimeType) {
+            return layerAdder(OL_HELPERS.createGeoJSONLayer(proxyUri));
+        } /*else if (FRAGVIZ.UTILS.MIME.getExtensionMimeType("esri_geojson") == mimeType) {
+         return layerAdder(OL_HELPERS.createEsriGeoJSONLayer(proxyUri))
+         } */ else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wms"] == mimeType) {
+            return OL_HELPERS.withWMSLayers(proxyUri, proxifyFn(url, true), layerAdder, undefined /*layername*/, true/*useTiling*/, map)
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wmts"] == mimeType) {
+            return OL_HELPERS.withWMTSLayers(proxyUri, layerAdder, undefined /*layername*/, undefined/*projection*/, undefined /*resolution*/);
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wfs"] == mimeType) {
+            return OL_HELPERS.withFeatureTypesLayers(proxyUri, layerAdder, undefined /*FTname*/, map, true /* useGET */);
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["arcgis_rest"] == mimeType) {
+            return OL_HELPERS.withArcGisLayers(proxyUri, layerAdder, undefined, undefined, map);
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wfs3"] == mimeType) {
+            return OL_HELPERS.withWFS3Types(proxyUri, layerAdder, undefined, map, proxifyFn);
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["gpkg"] == mimeType) {
+            return OL_HELPERS.withGeoPackageLayers(proxyUri, layerAdder, undefined, map, proxifyFn);
+        }
+
+        return deferredResult;
+    }
+
+
+
+    /**
+     * Convenient code to create a map with default widgets
+     * config ::= {
+     *      container : [ cssSelector | element ]
+     *      featureInfoPopup : [true | false | FeatureInfoOverlay],
+     *      featureDetailsControl : [true | false | FeatureDetailsControl],
+     *      layerSwitcher : [true | false | HilatsLayerSwitcher],
+     *      styleMap: [undefined | style map with optional 'selected', 'highlight' keys ]
+     *      baseMapLayer
+     * }
+     * @param config
+     */
+    OL_HELPERS.createMap = function(config) {
+
+        var container = typeof config.container == "string" ?
+            $(config.container)[0] :
+            config.container
+
+        if (!container)
+            throw "Container not found: " + config.container;
+
+        var baseMapLayer = config.baseMapLayer;
+
+        // set up featureDetailsControl
+        var featureDetailsControl = undefined;
+        if (typeof config.featureDetailsControl == "object")
+            featureDetailsControl = config.featureDetailsControl
+        else if (config.featureDetailsControl === true)
+            featureDetailsControl = new OL_HELPERS.FeatureDetailsControl()
+
+        // set up dataPopupOverlay
+        var dataPopupOverlay = undefined;
+        if (typeof config.featureInfoPopup == "object")
+            dataPopupOverlay = config.featureInfoPopup
+        else if (config.featureInfoPopup === true)
+            dataPopupOverlay = new OL_HELPERS.FeatureInfoOverlay({
+                element: $("<div class='ol-feature-popup'><div class='popupContent'></div></div>")[0],
+                autoPan: false,
+                offset: [5,5],
+                showDetails: false
+            })
+
+        // set up layerSwitcher
+        var layerSwitcher = undefined;
+        if (typeof config.layerSwitcher == "object")
+            layerSwitcher = config.layerSwitcher
+        else if (config.layerSwitcher === true)
+            layerSwitcher = new ol.control.HilatsLayerSwitcher()
+
+        var controls = [
+            new ol.control.ZoomSlider(),
+            new ol.control.MousePosition()
+        ]
+        layerSwitcher && controls.push(layerSwitcher);
+        featureDetailsControl && controls.push(featureDetailsControl);
+
+        var options = {
+            target: container,
+            layers: [baseMapLayer],
+            controls: controls,
+            //fractionalZoom: true
+
+            loadingDiv: false,
+            overlays: dataPopupOverlay ? [dataPopupOverlay] : undefined,
+            view: new ol.View({
+                // projection attr should be set when creating a baselayer
+                projection: baseMapLayer.getSource().getProjection() || OL_HELPERS.Mercator,
+                extent: baseMapLayer.getExtent(),
+                //center: [0,0],
+                //zoom: 4
+            }),
+            loadingListener: layerSwitcher && _.bind(layerSwitcher.isLoading, layerSwitcher)
+        }
+
+        var map = new OL_HELPERS.LoggingMap(options);
+        // by default stretch the map to the basemap extent or to the world
+        map.getView().fit(
+            baseMapLayer.getExtent() || ol.proj.transformExtent(OL_HELPERS.WORLD_BBOX, OL_HELPERS.EPSG4326, map.getView().getProjection()),
+            {constrainResolution: false}
+        );
+
+
+        map.featureDetailsControl = featureDetailsControl;
+        map.layerSwitcher = layerSwitcher;
+        map.dataPopupOverlay = dataPopupOverlay;
+
+        // Add a feature selection interaction
+        var featureSelector = map.featureSelector = new ol.interaction.Select({
+            multi: true,
+            condition: ol.events.condition.click,
+            style: function(feature, resolution) {
+                return config.styleMap && config.styleMap.selected;
+            },
+            filter: function(feature, layer) {
+                return layer != null // exclude unmanaged layers
+                    && feature.get('type') !='capture'
+            }
+        });
+        map.addInteraction(featureSelector);
+
+
+        // Add a feature hover interaction
+        var highlighter = new ol.interaction.Select({
+            style: function(feature, resolution) {
+                return config.styleMap && config.styleMap.highlight;
+            },
+            toggleCondition : function(evt) {return false},
+            multi: true,
+            condition: ol.events.condition.pointerMove
+        });
+        highlighter.on('select', function(evt) {
+            var hit = highlighter.getFeatures().getLength();
+            $(map.getTarget()).css("cursor", hit ? 'pointer' : '');
+        })
+        map.addInteraction(highlighter);
+
+
+        // force a reload of all vector sources on projection change
+        map.getView().on('change:projection', function() {
+            map.getLayers().forEach(function(layer) {
+                if (layer instanceof ol.layer.Vector) {
+                    layer.getSource().clear();
+                }
+            });
+        });
+        map.on('change:view', function() {
+            map.getLayers().forEach(function(layer) {
+                if (layer instanceof ol.layer.Vector) {
+                    layer.getSource().clear();
+                }
+            });
+        });
+
+        return map;
     }
 
 }) ();
