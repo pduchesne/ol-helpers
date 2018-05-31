@@ -93,7 +93,47 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     var root = this;
     var OL_HELPERS = root.OL_HELPERS = {
         // this is currently used only for geojson parsing
-        FEATURE_GEOM_PROP : '_HILATS_Geometry'
+        FEATURE_GEOM_PROP : '_HILATS_Geometry',
+        DEFAULT_STYLEMAP : {
+        highlight : new ol.style.Style({
+            stroke: new ol.style.Stroke({
+                color: 'blue',
+                width: 3
+            }),
+            image: new ol.style.Circle({
+                radius: 5,
+                stroke: new ol.style.Stroke({
+                    color: 'blue',
+                    width: 3
+                })
+            })
+        }),
+            selected : [
+            new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'white',
+                    width: 5
+                })}),
+            new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'green',
+                    width: 3
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 255, 255, 0.1)'
+                }),
+                image: new ol.style.Circle({
+                    radius: 5,
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: 'green',
+                        width: 3
+                    })
+                })
+            }) ]
+    }
     };
 
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
@@ -501,6 +541,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     };
 
     OL_HELPERS.FeatureDetailsControl.prototype.setFeatures = function(features) {
+        if (features instanceof ol.Collection)
+            features = features.getArray();
         this.set(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES, features || []);
     };
 
@@ -903,7 +945,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     OL_HELPERS.createGFTLayer = function (tableId, GoogleAPIKey) {
         return new OpenLayers.Layer.Vector(
             "GFT", {
-                styleMap: defaultStyleMap,
+                styleMap: OL_HELPERS.DEFAULT_STYLEMAP,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
                 protocol: new OpenLayers.Protocol.Script({
@@ -952,7 +994,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     OL_HELPERS.createGMLLayer = function (url) {
 
         var gml = new OpenLayers.Layer.Vector("GML", {
-            styleMap: defaultStyleMap,
+            styleMap: OL_HELPERS.DEFAULT_STYLEMAP,
             strategies: [new OpenLayers.Strategy.Fixed()],
             protocol: new OpenLayers.Protocol.HTTP({
                 url: url,
@@ -1861,7 +1903,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var esrijson = new OpenLayers.Layer.Vector(
             "Esri GeoJSON",
             {
-                styleMap: defaultStyleMap,
+                styleMap: OL_HELPERS.DEFAULT_STYLEMAP,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
                 style: default_style,
@@ -2408,26 +2450,32 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         map.featureDetailsControl = featureDetailsControl;
         map.layerSwitcher = layerSwitcher;
         map.dataPopupOverlay = dataPopupOverlay;
+        map.styleMap = config.styleMap || OL_HELPERS.DEFAULT_STYLEMAP;
 
         // Add a feature selection interaction
-        var featureSelector = map.featureSelector = new ol.interaction.Select({
-            multi: true,
-            condition: ol.events.condition.click,
-            style: function(feature, resolution) {
-                return config.styleMap && config.styleMap.selected;
-            },
-            filter: function(feature, layer) {
-                return layer != null // exclude unmanaged layers
-                    && feature.get('type') !='capture'
-            }
-        });
-        map.addInteraction(featureSelector);
+        if (featureDetailsControl) {
+            var featureSelector = map.featureSelector = new ol.interaction.Select({
+                multi: true,
+                condition: ol.events.condition.click,
+                style: function (feature, resolution) {
+                    return map.styleMap && map.styleMap.selected;
+                },
+                filter: function (feature, layer) {
+                    return layer != null // exclude unmanaged layers
+                        && feature.get('type') != 'capture'
+                }
+            });
+            map.addInteraction(featureSelector);
+            featureSelector.on('select', function (evt) {
+                map.featureDetailsControl.setFeatures(featureSelector.getFeatures());
+            })
+        }
 
 
         // Add a feature hover interaction
         var highlighter = new ol.interaction.Select({
             style: function(feature, resolution) {
-                return config.styleMap && config.styleMap.highlight;
+                return map.styleMap && map.styleMap.highlight;
             },
             toggleCondition : function(evt) {return false},
             multi: true,
