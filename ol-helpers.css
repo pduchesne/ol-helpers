@@ -2,6 +2,30 @@
 .ol-viewport > canvas {
   position: absolute;
 }
+.ol-viewport .ol-feature-popup {
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: 2px;
+  color: white;
+  margin-top: 5px;
+  margin-left: 5px;
+}
+.ol-viewport .ol-feature-popup .popupContent > div {
+  padding: 3px;
+}
+.ol-viewport .ol-feature-popup .popupContent > table {
+  margin: 3px;
+}
+.ol-viewport .ol-feature-popup .popupContent > table .propKey {
+  text-align: right;
+  padding-right: 5px;
+}
+.ol-viewport .ol-feature-popup .popupContent > table .propValue {
+  text-align: left;
+}
+.ol-viewport .ol-feature-popup .name {
+  font-weight: bold;
+  border-bottom: 1px solid #e5e4e7;
+}
 .ol-viewport .ol-feature-details {
   position: absolute;
   background-color: rgba(0, 0, 0, 0.75);

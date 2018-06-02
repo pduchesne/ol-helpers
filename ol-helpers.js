@@ -93,7 +93,47 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     var root = this;
     var OL_HELPERS = root.OL_HELPERS = {
         // this is currently used only for geojson parsing
-        FEATURE_GEOM_PROP : '_HILATS_Geometry'
+        FEATURE_GEOM_PROP : '_HILATS_Geometry',
+        DEFAULT_STYLEMAP : {
+        highlight : new ol.style.Style({
+            stroke: new ol.style.Stroke({
+                color: 'blue',
+                width: 3
+            }),
+            image: new ol.style.Circle({
+                radius: 5,
+                stroke: new ol.style.Stroke({
+                    color: 'blue',
+                    width: 3
+                })
+            })
+        }),
+            selected : [
+            new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'white',
+                    width: 5
+                })}),
+            new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'green',
+                    width: 3
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 255, 255, 0.1)'
+                }),
+                image: new ol.style.Circle({
+                    radius: 5,
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: 'green',
+                        width: 3
+                    })
+                })
+            }) ]
+    }
     };
 
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
@@ -461,6 +501,16 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     };
 
 
+    /**
+     * Options : {
+     *     className,
+     *     target,
+     *     render : () => {render all features} ,
+     *     renderFeature : (feature, $elem) => {render feature in $elem}
+     * }
+     * @param opt_options
+     * @constructor
+     */
     OL_HELPERS.FeatureDetailsControl = function(opt_options) {
 
         var options = opt_options ? opt_options : {};
@@ -491,6 +541,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     };
 
     OL_HELPERS.FeatureDetailsControl.prototype.setFeatures = function(features) {
+        if (features instanceof ol.Collection)
+            features = features.getArray();
         this.set(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES, features || []);
     };
 
@@ -925,7 +977,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     OL_HELPERS.createGFTLayer = function (tableId, GoogleAPIKey) {
         return new OpenLayers.Layer.Vector(
             "GFT", {
-                styleMap: defaultStyleMap,
+                styleMap: OL_HELPERS.DEFAULT_STYLEMAP,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
                 protocol: new OpenLayers.Protocol.Script({
@@ -974,7 +1026,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     OL_HELPERS.createGMLLayer = function (url) {
 
         var gml = new OpenLayers.Layer.Vector("GML", {
-            styleMap: defaultStyleMap,
+            styleMap: OL_HELPERS.DEFAULT_STYLEMAP,
             strategies: [new OpenLayers.Strategy.Fixed()],
             protocol: new OpenLayers.Protocol.HTTP({
                 url: url,
@@ -1410,7 +1462,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                                 throw "Not Implemented";
                                             }
 
-                                            layerProcessor(ftLayer)
+                                            layerProcessor && layerProcessor(ftLayer)
                                         }
 
                                     })
@@ -1428,7 +1480,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 })
 
                 $.when.apply($, deferredLayers).then(function() {
-                    deferredResult.resolve(deferredLayers)
+                    deferredResult.resolve(Array.from(arguments))
                 })
 
             },
@@ -1598,13 +1650,13 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                             ftLayer.getSource().set('ftDescr', candidate);
                             ftLayer.getSource().getFullExtent = getFT3SourceExtent;
 
-                            layerProcessor(ftLayer);
+                            layerProcessor && layerProcessor(ftLayer);
 
                             deferredLayer.resolve(ftLayer);
                         })
 
                         $.when.apply($, deferredLayers).then(function() {
-                            deferredResult.resolve(deferredLayers)
+                            deferredResult.resolve(Array.from(arguments))
                         })
 
                     },
@@ -1682,7 +1734,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                             mapLayer.getSource().set('mlDescr', candidate);
                             mapLayer.getSource().getFullExtent = getWMSSourceExtent;
 
-                            layerProcessor(mapLayer)
+                            layerProcessor && layerProcessor(mapLayer)
 
                             deferredLayer.resolve(mapLayer)
                         } catch (err) {
@@ -1702,7 +1754,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
                 $.when.apply($, deferredLayers).then(
                     function() {
-                        deferredResult.resolve(deferredLayers)
+                        deferredResult.resolve(Array.from(arguments))
                     },
                     function(err) {
                         deferredResult.reject(err)
@@ -1720,7 +1772,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     }
 
 
-    OL_HELPERS.withWMTSLayers = function (capaUrl, layerProcessor, layerName, projection, resolutions) {
+    OL_HELPERS.withWMTSLayers = function (capaUrl, layerProcessor, layerName, projection, resolutions, matrixSet) {
 
         var deferredResult = $.Deferred()
 
@@ -1729,6 +1781,17 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         OL_HELPERS.parseWMTSCapas(
             capaUrl,
             function (capas) {
+
+                // make sure TileMatrix ids are not prefixed with TileMatrixSet ids
+                capas.Contents.Layer.forEach(function(l) {
+                    l.TileMatrixSetLink.forEach(function(tmslk) {
+                        tmslk.TileMatrixSetLimits.forEach(function(tmslmts) {
+                            if (tmslmts.TileMatrix.startsWith(tmslk.TileMatrixSet+':')) {
+                                tmslmts.TileMatrix = tmslmts.TileMatrix.substring(tmslk.TileMatrixSet.length+1);
+                            }
+                        })
+                    })
+                });
 
                 var candidates = capas['Contents']['Layer']
                 if (layerName) candidates = candidates.filter(function (layer) {
@@ -1750,6 +1813,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                         // WMTS.optionsFromCapabilities does not accept undefined projection value in its params
                         if (projection)
                             params.projection = projection
+                        else if (matrixSet)
+                            params.matrixSet = matrixSet
 
                         var options = ol.source.WMTS.optionsFromCapabilities(capas, params);
 
@@ -1784,7 +1849,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                         mapLayer.getSource().set('mlDescr', candidate);
                         mapLayer.getSource().getFullExtent = getWMTSSourceExtent;
 
-                        layerProcessor(mapLayer)
+                        layerProcessor && layerProcessor(mapLayer)
 
                         deferredLayer.resolve(mapLayer)
                     } catch (err) {
@@ -1793,7 +1858,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 })
 
                 $.when.apply($, deferredLayers).then(function() {
-                    deferredResult.resolve(deferredLayers)
+                    deferredResult.resolve(Array.from(arguments));
                 })
 
             },
@@ -1883,7 +1948,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var esrijson = new OpenLayers.Layer.Vector(
             "Esri GeoJSON",
             {
-                styleMap: defaultStyleMap,
+                styleMap: OL_HELPERS.DEFAULT_STYLEMAP,
                 projection: EPSG4326,
                 strategies: [new OpenLayers.Strategy.Fixed()],
                 style: default_style,
@@ -1979,7 +2044,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                     var deferredLayer = $.Deferred();
                     deferredLayers.push(deferredLayer);
                     var newLayer = OL_HELPERS.createArcgisFeatureLayer((layerBaseUrl || url) + "/query", descriptor, true, map)
-                    layerProcessor(newLayer);
+                    layerProcessor && layerProcessor(newLayer);
 
                     deferredLayer.resolve(newLayer);
                 } else if (descriptor.type == "Group Layer") {
@@ -1987,11 +2052,11 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 } else if (!descriptor.type && descriptor.layers) {
                     var isFirst = true
                     $_.each(descriptor.layers, function (layer, idx) {
-                        var deferredLayer = $.Deferred();
-                        deferredLayers.push(deferredLayer);
                         if (!layer.subLayerIds) {
+                            var deferredLayer = $.Deferred();
+                            deferredLayers.push(deferredLayer);
                             var newLayer = OL_HELPERS.createArcgisFeatureLayer((layerBaseUrl || url) + "/" + layer.id + "/query", layer, isFirst, map)
-                            layerProcessor(newLayer)
+                            layerProcessor && layerProcessor(newLayer)
                             isFirst = false;
                             deferredLayer.resolve(newLayer);
                         }
@@ -1999,7 +2064,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 }
 
                 $.when.apply($, deferredLayers).then(function() {
-                    deferredResult.resolve(deferredLayers)
+                    deferredResult.resolve(Array.from(arguments))
                 })
 
             }
@@ -2265,11 +2330,23 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var attribution;
 
 
-        if (mapConfig.type == 'OSM') {
+        if (! mapConfig.type) {
+            urls = 'http://tile.openstreetmap.org/{z}/{x}/{y}.png';
+            var baseMapLayer = new ol.layer.Tile(
+                {title: 'OSM',
+                    type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
+                    source:new ol.source.OSM({
+                        url: urls,
+                        attributions: 'Map tiles & Data by OpenStreetMap, under CC BY SA.'
+                    })
+                });
+
+            callback (baseMapLayer);
+        } else if (mapConfig.type.toLowerCase() == 'osm') {
             urls = mapConfig['url'];
 
             var baseMapLayer = new ol.layer.Tile(
-                {title: mapConfig['title'],
+                {title: mapConfig['title'] || 'OSM',
                     type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
                     source:new ol.source.OSM({
                         url: urls,
@@ -2278,6 +2355,19 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                        */
                     })
                 });
+
+            callback (baseMapLayer);
+
+        } else if (mapConfig.type.toLowerCase() == 'stamen') {
+            var layer = mapConfig['layer'] || 'watercolor';
+            var baseMapLayer = new ol.layer.Tile({
+                title: mapConfig['title'] || 'stamen',
+                type: isBaseLayer?'base':undefined, // necessary for ol3-layerswitcher
+                source: new ol.source.Stamen({
+                    layer: layer,
+                    attributions: 'Map tiles by <a href="http://stamen.com">Stamen Design</a> (<a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a>). Data by <a href="http://openstreetmap.org">OpenStreetMap</a> (<a href="http://creativecommons.org/licenses/by-sa/3.0">CC BY SA</a>)'
+                })
+            });
 
             callback (baseMapLayer);
 
@@ -2332,21 +2422,32 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             callback (baseMapLayer);
         }  else if (mapConfig.type == 'wmts') {
 
+            var layerCallback = function(layer, title_suffix) {
+                layer.set('type', 'base');
+                mapConfig['dimensions'] && layer.getSource().updateDimensions(mapConfig['dimensions']);
+                mapConfig['title'] && layer.set('title', mapConfig['title'] + (title_suffix ?  (' '+title_suffix) : ''));
+                /* TODO
+                 layer.options.attribution = mapConfig.attribution
+                 */
+                callback (layer);
+            };
+
             OL_HELPERS.withWMTSLayers(
                 mapConfig['url'],
-                function(layer) {
-                    layer.set('type', 'base');
-                    mapConfig['dimensions'] && layer.getSource().updateDimensions(mapConfig['dimensions']);
-                    mapConfig['title'] && layer.set('title', mapConfig['title']);
-                    /* TODO
-                    layer.options.attribution = mapConfig.attribution
-*/
-                    callback (layer);
-                },
+                undefined, //layerCallback,
                 mapConfig['layer'],
                 mapConfig['srs'],
-                mapConfig['resolutions'] && eval(mapConfig['resolutions'])
-            )
+                    mapConfig['resolutions'] && eval(mapConfig['resolutions'],
+                    mapConfig['matrixSet'])
+            ).then(function(layers) {
+                    if (layers.length <= 1)
+                        layers.forEach(layerCallback);
+                    else {
+                        layers.forEach(function(layer) {
+                            layerCallback(layer, layer.get('title'))
+                        });
+                    }
+                })
 
         } else if (mapConfig.type == 'wms') {
             urls = mapConfig['url'];
@@ -2390,10 +2491,234 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             }
             callback (baseMapLayer);
 
+        } else {
+            throw "Unknown basemap type: "+ mapConfig.type;
         }
 
 
 
+    }
+
+
+    OL_HELPERS.SUPPORTED_MIME_TYPES = {
+        'kml': 'application/vnd.google-earth.kml+xml',
+        'gml': 'application/gml+xml',
+        'wms': 'application/vnd.ogc.wms_xml',
+        'wfs': 'application/vnd.ogc.wfs_xml',
+        'wfs3': 'application/vnd.ogc.wfs3',
+        'gpkg': 'application/vnd.opengeospatial.geopackage+sqlite3',
+        'wmts': 'service/wmts',
+        'arcgis_rest': 'application/vnd.esri.arcgis.rest',
+        'geojson' : 'application/geo+json',
+        'json' : 'application/json'
+    };
+
+    /**
+     * Adds layers from a URL to a map
+     * @param map map to add layers to
+     * @param url url of the layer(s) resource
+     * @param mimetype mime type of the URL
+     * @param proxifyFn optional fn to proxify URLs if needed and work around cross-domain issues; takes 2 arguments : url and boolean isImageUrl
+     * @param addLayerCallback callback to be called to add the layer to the map; must return a promise resolved when layer is added
+     */
+    OL_HELPERS.addLayersFromUrl = function(map, url, mimeType, proxifyFn, addLayerCallback) {
+
+        /*
+         mimeType = mimeType || _this.guessMimeType(uri)
+         var proxyUri = FRAGVIZ.UTILS.proxifyUrl(uri)
+         */
+
+
+        /*
+         var layers = _this.mapLayers = []
+         var layerAdder = function (layer) {
+         layer.set('isResourceLayer', true); // mark layer as part of displayedResource
+         layers.push(layer)
+         return map.addLayerWithExtent(layer)
+
+         //if (_this.annotationLayer)
+         //    map.setLayerIndex(_this.annotationLayer, map.getNumLayers());
+         }
+         */
+        var layerAdder = addLayerCallback || function (layer) {
+            return map.addLayerWithExtent(layer);
+        }
+
+
+        var deferredResult = $.Deferred()
+
+        // default proxifyFn is to return URL as is
+        proxifyFn = proxifyFn || function(url) {return url;}
+        var proxyUri = proxifyFn(url);
+
+        //TODO implement done and fail for synchronous calls too
+        if (OL_HELPERS.SUPPORTED_MIME_TYPES['kml'] == mimeType) {
+            return layerAdder(OL_HELPERS.createKMLLayer(proxyUri));
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["gml"] == mimeType) {
+            return layerAdder(OL_HELPERS.createGMLLayer(proxyUri));
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["geojson"] == mimeType || OL_HELPERS.SUPPORTED_MIME_TYPES["json"] == mimeType) {
+            return layerAdder(OL_HELPERS.createGeoJSONLayer(proxyUri));
+        } /*else if (FRAGVIZ.UTILS.MIME.getExtensionMimeType("esri_geojson") == mimeType) {
+         return layerAdder(OL_HELPERS.createEsriGeoJSONLayer(proxyUri))
+         } */ else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wms"] == mimeType) {
+            return OL_HELPERS.withWMSLayers(proxyUri, proxifyFn(url, true), layerAdder, undefined /*layername*/, true/*useTiling*/, map)
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wmts"] == mimeType) {
+            return OL_HELPERS.withWMTSLayers(proxyUri, layerAdder, undefined /*layername*/, undefined/*projection*/, undefined /*resolution*/, undefined /*matrixSet*/);
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wfs"] == mimeType) {
+            return OL_HELPERS.withFeatureTypesLayers(proxyUri, layerAdder, undefined /*FTname*/, map, true /* useGET */);
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["arcgis_rest"] == mimeType) {
+            return OL_HELPERS.withArcGisLayers(proxyUri, layerAdder, undefined, undefined, map);
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wfs3"] == mimeType) {
+            return OL_HELPERS.withWFS3Types(proxyUri, layerAdder, undefined, map, proxifyFn);
+        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["gpkg"] == mimeType) {
+            return OL_HELPERS.withGeoPackageLayers(proxyUri, layerAdder, undefined, map, proxifyFn);
+        }
+
+        return deferredResult;
+    }
+
+
+
+    /**
+     * Convenient code to create a map with default widgets
+     * config ::= {
+     *      container : [ cssSelector | element ]
+     *      featureInfoPopup : [true | false | FeatureInfoOverlay],
+     *      featureDetailsControl : [true | false | FeatureDetailsControl],
+     *      layerSwitcher : [true | false | HilatsLayerSwitcher],
+     *      styleMap: [undefined | style map with optional 'selected', 'highlight' keys ]
+     *      baseMapLayer
+     * }
+     * @param config
+     */
+    OL_HELPERS.createMap = function(config) {
+
+        var container = typeof config.container == "string" ?
+            $(config.container)[0] :
+            config.container
+
+        if (!container)
+            throw "Container not found: " + config.container;
+
+        var baseMapLayer = config.baseMapLayer;
+
+        // set up featureDetailsControl
+        var featureDetailsControl = undefined;
+        if (typeof config.featureDetailsControl == "object")
+            featureDetailsControl = config.featureDetailsControl
+        else if (config.featureDetailsControl === true)
+            featureDetailsControl = new OL_HELPERS.FeatureDetailsControl()
+
+        // set up dataPopupOverlay
+        var dataPopupOverlay = undefined;
+        if (typeof config.featureInfoPopup == "object")
+            dataPopupOverlay = config.featureInfoPopup
+        else if (config.featureInfoPopup === true)
+            dataPopupOverlay = new OL_HELPERS.FeatureInfoOverlay({
+                element: $("<div class='ol-feature-popup'><div class='popupContent'></div></div>")[0],
+                autoPan: false,
+                offset: [5,5],
+                showDetails: false
+            })
+
+        // set up layerSwitcher
+        var layerSwitcher = undefined;
+        if (typeof config.layerSwitcher == "object")
+            layerSwitcher = config.layerSwitcher
+        else if (config.layerSwitcher === true)
+            layerSwitcher = new ol.control.HilatsLayerSwitcher()
+
+        var controls = [
+            new ol.control.ZoomSlider(),
+            new ol.control.MousePosition()
+        ]
+        layerSwitcher && controls.push(layerSwitcher);
+        featureDetailsControl && controls.push(featureDetailsControl);
+
+        var options = {
+            target: container,
+            layers: [baseMapLayer],
+            controls: controls,
+            //fractionalZoom: true
+
+            loadingDiv: false,
+            overlays: dataPopupOverlay ? [dataPopupOverlay] : undefined,
+            view: new ol.View({
+                // projection attr should be set when creating a baselayer
+                projection: baseMapLayer.getSource().getProjection() || OL_HELPERS.Mercator,
+                extent: baseMapLayer.getExtent(),
+                //center: [0,0],
+                //zoom: 4
+            }),
+            loadingListener: layerSwitcher && _.bind(layerSwitcher.isLoading, layerSwitcher)
+        }
+
+        var map = new OL_HELPERS.LoggingMap(options);
+        // by default stretch the map to the basemap extent or to the world
+        map.getView().fit(
+            baseMapLayer.getExtent() || ol.proj.transformExtent(OL_HELPERS.WORLD_BBOX, OL_HELPERS.EPSG4326, map.getView().getProjection()),
+            {constrainResolution: false}
+        );
+
+
+        map.featureDetailsControl = featureDetailsControl;
+        map.layerSwitcher = layerSwitcher;
+        map.dataPopupOverlay = dataPopupOverlay;
+        map.styleMap = config.styleMap || OL_HELPERS.DEFAULT_STYLEMAP;
+
+        // Add a feature selection interaction
+        if (featureDetailsControl) {
+            var featureSelector = map.featureSelector = new ol.interaction.Select({
+                multi: true,
+                condition: ol.events.condition.click,
+                style: function (feature, resolution) {
+                    return map.styleMap && map.styleMap.selected;
+                },
+                filter: function (feature, layer) {
+                    return layer != null // exclude unmanaged layers
+                        && feature.get('type') != 'capture'
+                }
+            });
+            map.addInteraction(featureSelector);
+            featureSelector.on('select', function (evt) {
+                map.featureDetailsControl.setFeatures(featureSelector.getFeatures());
+            })
+        }
+
+
+        // Add a feature hover interaction
+        var highlighter = new ol.interaction.Select({
+            style: function(feature, resolution) {
+                return map.styleMap && map.styleMap.highlight;
+            },
+            toggleCondition : function(evt) {return false},
+            multi: true,
+            condition: ol.events.condition.pointerMove
+        });
+        highlighter.on('select', function(evt) {
+            var hit = highlighter.getFeatures().getLength();
+            $(map.getTarget()).css("cursor", hit ? 'pointer' : '');
+        })
+        map.addInteraction(highlighter);
+
+
+        // force a reload of all vector sources on projection change
+        map.getView().on('change:projection', function() {
+            map.getLayers().forEach(function(layer) {
+                if (layer instanceof ol.layer.Vector) {
+                    layer.getSource().clear();
+                }
+            });
+        });
+        map.on('change:view', function() {
+            map.getLayers().forEach(function(layer) {
+                if (layer instanceof ol.layer.Vector) {
+                    layer.getSource().clear();
+                }
+            });
+        });
+
+        return map;
     }
 
 }) ();
