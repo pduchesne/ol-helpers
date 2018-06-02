@@ -95,45 +95,45 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         // this is currently used only for geojson parsing
         FEATURE_GEOM_PROP : '_HILATS_Geometry',
         DEFAULT_STYLEMAP : {
-        highlight : new ol.style.Style({
-            stroke: new ol.style.Stroke({
-                color: 'blue',
-                width: 3
-            }),
-            image: new ol.style.Circle({
-                radius: 5,
+            highlight : new ol.style.Style({
                 stroke: new ol.style.Stroke({
                     color: 'blue',
                     width: 3
-                })
-            })
-        }),
-            selected : [
-            new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'white',
-                    width: 5
-                })}),
-            new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'green',
-                    width: 3
-                }),
-                fill: new ol.style.Fill({
-                    color: 'rgba(255, 255, 255, 0.1)'
                 }),
                 image: new ol.style.Circle({
                     radius: 5,
-                    fill: new ol.style.Fill({
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }),
                     stroke: new ol.style.Stroke({
-                        color: 'green',
+                        color: 'blue',
                         width: 3
                     })
                 })
-            }) ]
-    }
+            }),
+                selected : [
+                new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'white',
+                        width: 5
+                    })}),
+                new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'green',
+                        width: 3
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }),
+                    image: new ol.style.Circle({
+                        radius: 5,
+                        fill: new ol.style.Fill({
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }),
+                        stroke: new ol.style.Stroke({
+                            color: 'green',
+                            width: 3
+                        })
+                    })
+                }) ]
+        },
     };
 
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
@@ -1529,7 +1529,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                     }
 
                                     this.setState(ol.source.State.LOADING);
-                                    var getOpName = openAPIclient.spec.paths['/'+candidate.name].get.operationId;
+                                    var getOpName = openAPIclient.spec.paths['/collections/'+candidate.name+'/items'].get.operationId;
                                     return openAPIclient.apis.Features[getOpName](params).then(
                                         function (result) {
                                             if (result.parseError) {
@@ -1574,10 +1574,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                             })
 
                             ftSource.getFeatureById = function(id) {
-                                var getFeatureByIdOpName = openAPIclient.spec.paths['/'+candidate.name+'/{id}'].get.operationId;
+                                var getFeatureByIdOpName = openAPIclient.spec.paths['/collections/'+candidate.name+'/items/{featureId}'].get.operationId;
                                 var promise = $.Deferred();
                                 // try both the 'Features' and 'Feature' tags. Not sure which one is correct, check the spec.
-                                (openAPIclient.apis.Features[getFeatureByIdOpName] || openAPIclient.apis.Feature[getFeatureByIdOpName]) ({id: id, f: 'json'}).then(
+                                (openAPIclient.apis.Features[getFeatureByIdOpName] || openAPIclient.apis.Feature[getFeatureByIdOpName]) ({featureId: id, f: 'json'}).then(
                                     function (result) {
                                         if (result.parseError) {
                                             throw "Parse Error: "+result.parseError.message;
