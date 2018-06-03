@@ -161,6 +161,24 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         };
     }
 
+    var INCHES_PER_UNIT = {
+        'm': 39.37,
+        'degrees': 4374754
+    };
+    var DOTS_PER_INCH = 72;
+
+    OL_HELPERS.getScaleFromResolution = function(resolution, units, opt_round) {
+        var scale = INCHES_PER_UNIT[units] * DOTS_PER_INCH * resolution;
+        if (opt_round) {
+            scale = Math.round(scale);
+        }
+        return scale;
+    };
+
+    ol.Map.prototype.getScale = function(opt_round) {
+        return OL_HELPERS.getScaleFromResolution(this.getView().getResolution(), this.getView().getProjection().getUnits(), opt_round);
+    };
+
 
     ol.Map.prototype.addLayerWithExtent = function (layer) {
         this.addLayer(layer)
@@ -2438,9 +2456,41 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         else if (config.layerSwitcher === true)
             layerSwitcher = new ol.control.HilatsLayerSwitcher()
 
+        var padString = function(str, desiredLength) {
+            if (str.length<desiredLength)
+                str = ' '.repeat(desiredLength-str.length) + str;
+
+            return str;
+        }
+        var mousePosControl = new ol.control.MousePosition({
+            coordinateFormat: function(coordinates) {
+                var coordString = coordinates.map(
+                    function(coord, idx) {
+                        if (mousePosControl.currentUnit == 'degrees')
+                            return padString(parseFloat(coord.toFixed(4)).toString(), idx==0?9:8);
+                        else if (mousePosControl.currentUnit == 'm')
+                            return padString(parseFloat(coord.toFixed(0)).toString(), 9);
+                        else
+                            return coord;
+
+                    }
+                ).join(',');
+
+                if (mousePosControl.currentScale)
+                    coordString = "S:"+mousePosControl.currentScale.toFixed(0) +" | "+ coordString;
+
+                return coordString;
+            }
+        });
+        mousePosControl.updatedView = function(map) {
+            this.currentUnit = map.getView().getProjection().getUnits();
+            this.currentScale = map.getScale();
+        }
+
+
         var controls = [
             new ol.control.ZoomSlider(),
-            new ol.control.MousePosition()
+            mousePosControl
         ]
         layerSwitcher && controls.push(layerSwitcher);
         featureDetailsControl && controls.push(featureDetailsControl);
@@ -2464,6 +2514,18 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         }
 
         var map = new OL_HELPERS.LoggingMap(options);
+
+        map.getView().on('change:resolution', function() {
+            mousePosControl.updatedView(map);
+        });
+
+        map.on('change:view', function() {
+            mousePosControl.updatedView(map);
+            map.getView().on('change:resolution', function() {
+                mousePosControl.updatedView(map);
+            });
+        });
+
         // by default stretch the map to the basemap extent or to the world
         map.getView().fit(
             baseMapLayer.getExtent() || ol.proj.transformExtent(OL_HELPERS.WORLD_BBOX, OL_HELPERS.EPSG4326, map.getView().getProjection()),
