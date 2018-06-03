@@ -1964,7 +1964,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         return esrijson
     }
 
-    OL_HELPERS.withGeoPackageLayers = function (url, layerProcessor, layerName, layerBaseUrl, map) {
+    OL_HELPERS.withGeoPackageLayers = function (url, layerProcessor, layerName, map) {
 
         var deferredResult = $.Deferred()
 
@@ -1974,30 +1974,29 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             url,
             function (geoPackage) {
 
-
+                var first = true;
                 async.parallel([
                     function(callback) {
                         geoPackage.getTileTables(function(err, tables) {
                             async.eachSeries(tables, function(table, callback) {
                                 geoPackage.getTileDaoWithTableName(table, function(err, tileDao) {
                                     geoPackage.getInfoForTable(tileDao, function(err, info) {
-                                        /*
                                         var deferredLayer = $.Deferred();
                                         deferredLayers.push(deferredLayer);
-                                        var newLayer = OL_HELPERS.createGeoPackageTileLayer(info, true, map)
-                                        layerProcessor(newLayer);
+                                        var newLayer = OL_HELPERS.createGeoPackageTileLayer(geoPackage, info, tileDao, first, map)
+                                        first = false;
+                                         layerProcessor && layerProcessor(newLayer);
 
                                         //TODO deal with err
 
                                         deferredLayer.resolve(newLayer);
-                                        */
+
                                         callback();
                                     });
                                 });
                             }, callback);
                         });
                     }, function(callback) {
-                        var first = true;
                         geoPackage.getFeatureTables(function(err, tables) {
                             async.eachSeries(tables, function(table, callback) {
                                 geoPackage.getFeatureDaoWithTableName(table, function(err, featureDao) {
@@ -2006,7 +2005,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                         deferredLayers.push(deferredLayer);
                                         var newLayer = OL_HELPERS.createGeoPackageFeatureLayer(geoPackage, info, first, map);
                                         first = false;
-                                        layerProcessor(newLayer);
+                                        layerProcessor && layerProcessor(newLayer);
 
                                         //TODO deal with err
 
@@ -2019,7 +2018,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                     }
                 ], function() {
                     $.when.apply($, deferredLayers).then(function() {
-                        deferredResult.resolve(deferredLayers)
+                        deferredResult.resolve(Array.from(arguments))
                     })
                 });
 
@@ -2232,6 +2231,54 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         return layer;
     }
 
+    OL_HELPERS.createGeoPackageTileLayer = function (geoPackage, tableInfo, tileDao, visible, map) {
+        // get tileMatrixSet
+        var tms = tileDao.tileMatrixSet;
+        // get tile matrix
+
+        // create tile grid
+        var tileGrid = ol.tilegrid.createXYZ({
+            extent: [tms.min_x, tms.min_y, tms.max_x, tms.max_y], // extent of geopackage content
+            maxZoom: tileDao.maxZoom,
+            minZoom: tileDao.minZoom,
+            tileSize: [256, 256 /* tm.tile_width, tm.tile_height*/] // tile size in pixels
+        });
+        var gpr = new geopackage.GeoPackageTileRetriever(tileDao, 256, 256);
+
+        var geopackageTileLayer = new ol.layer.Tile({
+            title: tableInfo.tableName,
+            visible: visible,
+            source: new ol.source.XYZ({
+                tileUrlFunction: function(tileCoord) {
+                    // create a simplified url for use in the tileLoadFunction
+                    return tileCoord.toString();
+                },
+                tileLoadFunction: function(tile, url) {
+                    var zoom = map.getView().getZoom();
+
+                    if (zoom < tileDao.minZoom || zoom > tileDao.maxZoom) {
+                        console.log('No tiles exist in the GeoPackage for the current bounds and zoom level. Min zoom: ' + tileDao.minZoom + ' Max Zoom: ' + tileDao.maxZoom);
+                        return;
+                    }
+
+                    var tm = tileDao.getTileMatrixWithZoomLevel(zoom);
+
+                    var tileCoord = url.split(',');
+
+                    var tileX = parseInt(tileCoord[1]);
+                    var tileY = -tileCoord[2] - 1;
+                    var tileZ = tileCoord[0];
+
+                    gpr.getTile(tileX, tileY, tileZ, function(err, tileBase64DataURL) {
+                        tile.getImage().src = tileBase64DataURL;
+                    });
+                },
+                tileGrid : tileGrid
+            })
+        });
+
+        return geopackageTileLayer;
+    }
 
     OL_HELPERS.createGeoPackageFeatureLayer = function (geoPackage, gpFeatureTableInfo, visible, map) {
 
@@ -2247,7 +2294,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var geopackageLoader =
             function(extent, resolution, projection) {
 
-
+                var features = [];
                 geopackage.iterateGeoJSONFeaturesFromTable(
                     geoPackage,
                     gpFeatureTableInfo.tableName,
@@ -2279,12 +2326,15 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                         */
 
                         var feature = geojsonFormat.readFeature(geoJson, {featureProjection: projection});
+                        features.push(feature);
 
-                        geopackageLayer.getSource().addFeature(feature);
-
-                        setTimeout(done, 0);
+                        async.setImmediate(function(){
+                            done();
+                        });
                     },
                     function() {
+                        geopackageLayer.getSource().addFeatures(features);
+
                         // set source as ready once features are loaded
                         geopackageLayer.getSource().set('waitingOnFirstData', false)
                         geopackageLayer.getSource().setState(ol.source.State.READY);
