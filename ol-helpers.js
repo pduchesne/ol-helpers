@@ -143,6 +143,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     var EPSG4326_LONLAT = OL_HELPERS.EPSG4326_LONLAT = createEPSG4326Proj('EPSG:4326', 'enu')
     var Mercator = OL_HELPERS.Mercator = ol.proj.get("EPSG:3857")
     var WORLD_BBOX = OL_HELPERS.WORLD_BBOX = [-180, -90, 180, 90]
+    var WORLD_BBOX_MERCATOR = OL_HELPERS.WORLD_BBOX_MERCATOR = ol.proj.transformExtent(OL_HELPERS.WORLD_BBOX, OL_HELPERS.EPSG4326, OL_HELPERS.Mercator)
+
     var MAX_FEATURES = 300
 
     var isNumeric = function(n) {
@@ -2252,11 +2254,12 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     OL_HELPERS.createGeoPackageTileLayer = function (geoPackage, tableInfo, tileDao, visible, map) {
         // get tileMatrixSet
         var tms = tileDao.tileMatrixSet;
-        // get tile matrix
+
 
         // create tile grid
         var tileGrid = ol.tilegrid.createXYZ({
-            extent: [tms.min_x, tms.min_y, tms.max_x, tms.max_y], // extent of geopackage content
+            // always use WorldBBOX in 3857 to expose geopackage tiles
+            extent: OL_HELPERS.WORLD_BBOX_MERCATOR, //[tms.min_x, tms.min_y, tms.max_x, tms.max_y], // extent of geopackage content
             maxZoom: tileDao.maxZoom,
             minZoom: tileDao.minZoom,
             tileSize: [256, 256 /* tm.tile_width, tm.tile_height*/] // tile size in pixels
@@ -2267,6 +2270,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             title: tableInfo.tableName,
             visible: visible,
             source: new ol.source.XYZ({
+                projection: OL_HELPERS.Mercator, //tileDao.projection,
                 tileUrlFunction: function(tileCoord) {
                     // create a simplified url for use in the tileLoadFunction
                     return tileCoord.toString();
@@ -2275,17 +2279,16 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                     var zoom = map.getView().getZoom();
 
                     if (zoom < tileDao.minZoom || zoom > tileDao.maxZoom) {
-                        console.log('No tiles exist in the GeoPackage for the current bounds and zoom level. Min zoom: ' + tileDao.minZoom + ' Max Zoom: ' + tileDao.maxZoom);
+                        console.log('No tiles exist in the GeoPackage for the current bounds and zoom level ('+zoom+'). Min zoom: ' + tileDao.minZoom + ' Max Zoom: ' + tileDao.maxZoom);
+                        tile.getImage().src = '';
                         return;
                     }
-
-                    var tm = tileDao.getTileMatrixWithZoomLevel(zoom);
 
                     var tileCoord = url.split(',');
 
                     var tileX = parseInt(tileCoord[1]);
-                    var tileY = -tileCoord[2] - 1;
-                    var tileZ = tileCoord[0];
+                    var tileY = - parseInt(tileCoord[2]) - 1;
+                    var tileZ = parseInt(tileCoord[0]);
 
                     gpr.getTile(tileX, tileY, tileZ, function(err, tileBase64DataURL) {
                         tile.getImage().src = tileBase64DataURL;
@@ -2619,26 +2622,31 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         proxifyFn = proxifyFn || function(url) {return url;}
         var proxyUri = proxifyFn(url);
 
+        var matchExtension = function(ext) {
+            return OL_HELPERS.SUPPORTED_MIME_TYPES[ext] == mimeType || ext == mimeType;
+        }
+
         //TODO implement done and fail for synchronous calls too
-        if (OL_HELPERS.SUPPORTED_MIME_TYPES['kml'] == mimeType) {
+        if (matchExtension('kml')) {
             return layerAdder(OL_HELPERS.createKMLLayer(proxyUri));
-        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["gml"] == mimeType) {
+        } else if (matchExtension("gml")) {
             return layerAdder(OL_HELPERS.createGMLLayer(proxyUri));
-        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["geojson"] == mimeType || OL_HELPERS.SUPPORTED_MIME_TYPES["json"] == mimeType) {
+        } else if (matchExtension("geojson") || matchExtension("json")) {
             return layerAdder(OL_HELPERS.createGeoJSONLayer(proxyUri));
-        } /*else if (FRAGVIZ.UTILS.MIME.getExtensionMimeType("esri_geojson") == mimeType) {
+        } /*else if (matchExtension("esri_geojson")) {
          return layerAdder(OL_HELPERS.createEsriGeoJSONLayer(proxyUri))
-         } */ else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wms"] == mimeType) {
+         } */
+          else if (matchExtension("wms")) {
             return OL_HELPERS.withWMSLayers(proxyUri, proxifyFn(url, true), layerAdder, undefined /*layername*/, true/*useTiling*/, map)
-        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wmts"] == mimeType) {
+        } else if (matchExtension("wmts")) {
             return OL_HELPERS.withWMTSLayers(proxyUri, layerAdder, undefined /*layername*/, undefined/*projection*/, undefined /*resolution*/, undefined /*matrixSet*/);
-        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wfs"] == mimeType) {
+        } else if (matchExtension("wfs")) {
             return OL_HELPERS.withFeatureTypesLayers(proxyUri, layerAdder, undefined /*FTname*/, map, true /* useGET */);
-        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["arcgis_rest"] == mimeType) {
+        } else if (matchExtension("arcgis_rest")) {
             return OL_HELPERS.withArcGisLayers(proxyUri, layerAdder, undefined, undefined, map);
-        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["wfs3"] == mimeType) {
+        } else if (matchExtension("wfs3")) {
             return OL_HELPERS.withWFS3Types(proxyUri, layerAdder, undefined, map, proxifyFn);
-        } else if (OL_HELPERS.SUPPORTED_MIME_TYPES["gpkg"] == mimeType) {
+        } else if (matchExtension("gpkg")) {
             return OL_HELPERS.withGeoPackageLayers(proxyUri, layerAdder, undefined, map, proxifyFn);
         }
 
