@@ -2650,10 +2650,11 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
      * @param map map to add layers to
      * @param url url of the layer(s) resource
      * @param mimetype mime type of the URL
+     * @param resourceNames the names of the resources to add. If undefined, all available resources are added.
      * @param proxifyFn optional fn to proxify URLs if needed and work around cross-domain issues; takes 2 arguments : url and boolean isImageUrl
      * @param addLayerCallback callback to be called to add the layer to the map; must return a promise resolved when layer is added
      */
-    OL_HELPERS.addLayersFromUrl = function(map, url, mimeType, proxifyFn, addLayerCallback) {
+    OL_HELPERS.addLayersFromUrl = function(map, url, mimeType, resourceNames, proxifyFn, addLayerCallback) {
 
         /*
          mimeType = mimeType || _this.guessMimeType(uri)
@@ -2679,9 +2680,12 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         var deferredResult = $.Deferred()
 
-        var parsedUrl = url.split('#', 2);
-        var url = parsedUrl[0];
-        var fragmentsNames = parsedUrl.length > 1 ? parsedUrl[1].split(',') : undefined;
+        if (resourceNames === undefined) {
+            var parsedUrl = url.split('#', 2);
+            var url = parsedUrl[0];
+            resourceNames = parsedUrl.length > 1 ? parsedUrl[1].split(',') : undefined;
+        } else if (!Array.isArray(resourceNames))
+            resourceNames = [resourceNames];
 
         // default proxifyFn is to return URL as is
         proxifyFn = proxifyFn || function(url) {return url;}
@@ -2702,17 +2706,17 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
          return layerAdder(OL_HELPERS.createEsriGeoJSONLayer(proxyUri))
          } */
           else if (matchExtension("wms")) {
-            return OL_HELPERS.withWMSLayers(proxyUri, proxifyFn(url, true), layerAdder, fragmentsNames /*layername*/, true/*useTiling*/, map)
+            return OL_HELPERS.withWMSLayers(proxyUri, proxifyFn(url, true), layerAdder, resourceNames /*layername*/, true/*useTiling*/, map)
         } else if (matchExtension("wmts")) {
-            return OL_HELPERS.withWMTSLayers(proxyUri, layerAdder, fragmentsNames /*layername*/, undefined/*projection*/, undefined /*resolution*/, undefined /*matrixSet*/);
+            return OL_HELPERS.withWMTSLayers(proxyUri, layerAdder, resourceNames /*layername*/, undefined/*projection*/, undefined /*resolution*/, undefined /*matrixSet*/);
         } else if (matchExtension("wfs")) {
-            return OL_HELPERS.withFeatureTypesLayers(proxyUri, layerAdder, fragmentsNames /*FTname*/, map, true /* useGET */);
+            return OL_HELPERS.withFeatureTypesLayers(proxyUri, layerAdder, resourceNames /*FTname*/, map, true /* useGET */);
         } else if (matchExtension("arcgis_rest")) {
-            return OL_HELPERS.withArcGisLayers(proxyUri, layerAdder, fragmentsNames /*layername*/, undefined, map);
+            return OL_HELPERS.withArcGisLayers(proxyUri, layerAdder, resourceNames /*layername*/, undefined, map);
         } else if (matchExtension("wfs3")) {
-            return OL_HELPERS.withWFS3Types(proxyUri, layerAdder, fragmentsNames /*FTname*/, map, proxifyFn);
+            return OL_HELPERS.withWFS3Types(proxyUri, layerAdder, resourceNames /*FTname*/, map, proxifyFn);
         } else if (matchExtension("gpkg")) {
-            return OL_HELPERS.withGeoPackageLayers(proxyUri, layerAdder, fragmentsNames /*FTname*/, map, proxifyFn);
+            return OL_HELPERS.withGeoPackageLayers(proxyUri, layerAdder, resourceNames /*FTname*/, map, proxifyFn);
         }
 
         return deferredResult;
