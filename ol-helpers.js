@@ -95,45 +95,45 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         // this is currently used only for geojson parsing
         FEATURE_GEOM_PROP : '_HILATS_Geometry',
         DEFAULT_STYLEMAP : {
-        highlight : new ol.style.Style({
-            stroke: new ol.style.Stroke({
-                color: 'blue',
-                width: 3
-            }),
-            image: new ol.style.Circle({
-                radius: 5,
+            highlight : new ol.style.Style({
                 stroke: new ol.style.Stroke({
                     color: 'blue',
                     width: 3
-                })
-            })
-        }),
-            selected : [
-            new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'white',
-                    width: 5
-                })}),
-            new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'green',
-                    width: 3
-                }),
-                fill: new ol.style.Fill({
-                    color: 'rgba(255, 255, 255, 0.1)'
                 }),
                 image: new ol.style.Circle({
                     radius: 5,
-                    fill: new ol.style.Fill({
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }),
                     stroke: new ol.style.Stroke({
-                        color: 'green',
+                        color: 'blue',
                         width: 3
                     })
                 })
-            }) ]
-    }
+            }),
+            selected : [
+                new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'white',
+                        width: 5
+                    })}),
+                new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'green',
+                        width: 3
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }),
+                    image: new ol.style.Circle({
+                        radius: 5,
+                        fill: new ol.style.Fill({
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }),
+                        stroke: new ol.style.Stroke({
+                            color: 'green',
+                            width: 3
+                        })
+                    })
+                }) ]
+        }
     };
 
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
@@ -857,27 +857,41 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             })
     }
 
-    var parseWMSCapas = function (url, callback, failCallback) {
-        var parser = new ol.format.WMSCapabilities();
-        var params = {
-            SERVICE: "WMS",
-            REQUEST: "GetCapabilities"
+    var parseWMSCapas = function (url, version, callback, failCallback) {
+
+        if (version === undefined) {
+            // try to force 1.3.0
+            return parseWMSCapas(url, "1.3.0", callback)
+                .catch(function(err) {
+                    // if it fails, let the server choose the version
+                    return parseWMSCapas(url, "auto", callback, failCallback)
+                })
+        } else {
+            var parser = new ol.format.WMSCapabilities();
+            var params = {
+                SERVICE: "WMS",
+                REQUEST: "GetCapabilities"
+            }
+            if (version != 'auto' && version)
+                params.VERSION = version;
+
+            var url = url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params);
+
+            return fetch(url,
+                {method:'GET', credentials: 'include'}
+            ).then(
+                function(response) {
+                    return response.text();
+                }
+            ).then(_.bind(parser.read, parser)
+            ).then(callback)
+                .catch(function(err) {
+                    console.warn("Failed to read capabilities from "+url+"\nError: "+err);
+                    failCallback && failCallback(err);
+
+                    return Promise.reject(err);
+                })
         }
-        fetch(url + (url.indexOf('?')>=0?'&':'?') + kvp2string(params),
-              {method:'GET', credentials: 'include'}
-        ).then(
-            function(response) {
-                return response.text();
-            }
-        ).then(
-            function(text) {
-                var capabilities = parser.read(text);
-                callback(capabilities)
-            }
-        ).catch(failCallback || function(ex) {
-                console.warn("Trouble getting capabilities doc");
-                console.warn(ex);
-            })
 
     }
 
@@ -939,9 +953,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     }
 
     /* Define a custom KML Format that accepts an onread callback
-    *  to read global KML metadata (title, description, ...)      */
+     *  to read global KML metadata (title, description, ...)      */
 
-      OL_HELPERS.format = OL_HELPERS.format || {}
+    OL_HELPERS.format = OL_HELPERS.format || {};
     OL_HELPERS.format.KML = function(opt_options) {
 
         ol.format.KML.call(this, opt_options);
@@ -1113,9 +1127,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var $descr = $(xmlDoc);
 
         // WARN extremely fragile and hackish way to parse FT schema
-        var props = $descr[0].getElementsByTagNameNS('*', 'complexType')[0]
-                 .getElementsByTagNameNS('*', 'sequence')[0]
-                 .getElementsByTagNameNS('*', 'element')
+        var props = $descr[0]
+            .getElementsByTagNameNS('*', 'complexType')[0]
+            .getElementsByTagNameNS('*', 'sequence')[0]
+            .getElementsByTagNameNS('*', 'element')
 
         var featureTypeProperties = $(props).map(function(idx, prop) {
             return {
@@ -1725,6 +1740,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         parseWMSCapas(
             capaUrl,
+            undefined, /* version */
             function (capas) {
 
                 var ver = capas.version
@@ -2041,7 +2057,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                         deferredLayers.push(deferredLayer);
                                         var newLayer = OL_HELPERS.createGeoPackageTileLayer(geoPackage, info, tileDao, first, map)
                                         first = false;
-                                         layerProcessor && layerProcessor(newLayer);
+                                        layerProcessor && layerProcessor(newLayer);
 
                                         //TODO deal with err
 
