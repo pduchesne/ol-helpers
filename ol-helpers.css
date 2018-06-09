@@ -55,6 +55,9 @@
 .ol-viewport .ol-feature-details div.featureDetails > .content > table {
   margin: 3px;
 }
+.ol-viewport .ol-feature-details div.featureDetails > .content > table tr:hover {
+  background-color: black;
+}
 .ol-viewport .ol-feature-details div.featureDetails > .content > table .propKey {
   text-align: right;
   padding-right: 5px;

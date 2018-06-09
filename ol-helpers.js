@@ -603,6 +603,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
     };
 
+    var urlRegex = /[-a-zA-Z0-9@:%_\+.~#?&//=]{2,256}\.[a-z]{2,4}\b(\/[-a-zA-Z0-9@:%_\+.~#?&//=]*)?/gi
+
     OL_HELPERS.FeatureDetailsControl.renderFeature = function(feature, container) {
         var htmlContent;
 
@@ -614,8 +616,12 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             htmlContent += "<div class='content'><table>";
             var geomName = feature.getGeometryName();
             feature.getKeys().forEach(function(prop) {
-                if (prop != geomName)
-                    htmlContent += "<tr><td class='propKey'>" + prop + "</td><td class='propValue'>" + feature.get(prop) + "</td></tr></div>"
+                if (prop != geomName) {
+                    var value = feature.get(prop);
+                    if ((typeof value == 'string') && value.match(urlRegex))
+                        value = "<a href='"+value+"' target='_blank'>"+value+"</a>";
+                    htmlContent += "<tr><td class='propKey'>" + prop + "</td><td class='propValue'>" + value + "</td></tr></div>"
+                }
             })
             htmlContent += "</table></div>";
 
