@@ -209,7 +209,13 @@ ol.control.HilatsLayerSwitcher.prototype.renderLayer = function(lyr, container) 
             .attr("type", 'checkbox')
             .change(function(e) {this_.setVisible_(lyr, e.target.checked)})
             .appendTo(li);
-        li.append(label)
+        li.append(label);
+
+        if (lyr.getSource().getState() == ol.source.State.LOADING) {
+            li.append("<div class='simple_loader' style='display: inline-block; float:right'></div>")
+        } else if (lyr.getSource().getState() == ol.source.State.ERROR) {
+            li.append("<i class='fa fa-error' />")
+        }
     }
 
     if (container)
