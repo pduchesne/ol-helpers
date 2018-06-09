@@ -24,7 +24,7 @@ ol.control.HilatsLayerSwitcher = function(opt_options) {
 
     this.header = $("<div class='header'></div>")
 
-    var element = $("<div class='ol-unselectable ol-control layer-list'></div>");
+    var layerList = $("<div class='ol-unselectable ol-control layer-list'><div class='padder'></div></div>");
 
     var progressIndicator =  $("<div class='stacked-layers'>" +
                                 "<div class='stacked-layer layer-1'/>" +
@@ -33,10 +33,10 @@ ol.control.HilatsLayerSwitcher = function(opt_options) {
     this.parentElement
         .append(progressIndicator)
         .append(this.header)
-        .append(element);
+        .append(layerList);
 
 
-    this.panel = $("<div class='panel'></div>").appendTo(element)[0];
+    this.panel = $("<div class='panel'></div>").appendTo(layerList)[0];
 
     ol.control.HilatsLayerSwitcher.enableTouchScroll_(this.panel);
 
@@ -212,11 +212,19 @@ ol.control.HilatsLayerSwitcher.prototype.renderLayer = function(lyr, container) 
             .appendTo(li);
         li.append(label);
 
-        if (lyr.getSource().getState() == ol.source.State.LOADING) {
-            li.append("<div class='simple_loader' style='display: inline-block; float:right'></div>")
-        } else if (lyr.getSource().getState() == ol.source.State.ERROR) {
-            li.append("<i class='fa fa-error' />")
-        }
+        var stateListener = function() {
+            if (lyr.getSource().getState() == ol.source.State.LOADING) {
+                li.append("<div class='state simple_loader' style='display: inline-block; float:right'></div>")
+            } else if (lyr.getSource().getState() == ol.source.State.ERROR) {
+                li.append("<i class='state fa fa-error' />")
+            } else {
+                li.find(".state").remove();
+            }
+        };
+
+        stateListener();
+
+        lyr.getSource().on('change', stateListener);
     }
 
     if (container)
