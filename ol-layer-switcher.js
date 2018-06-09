@@ -194,7 +194,7 @@ ol.control.HilatsLayerSwitcher.prototype.renderLayer = function(lyr, container) 
 
     var li = $("<li></li>")
 
-    var label = $("<label></label>").text(lyr.get('title'))
+    var label = $("<span class='title'></span>").text(lyr.get('title'))
     if (lyr.getLayers) {
 
         li.append(label.addClass('group'));

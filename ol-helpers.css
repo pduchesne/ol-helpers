@@ -1,4 +1,8 @@
 /* OpenLayers styling */
+.ol-viewport {
+  font-family: "Helvetica Neue Light", "Lucida Grande", "Calibri", "Arial", sans-serif;
+  font-size: 8pt;
+}
 .ol-viewport > canvas {
   position: absolute;
 }
@@ -29,6 +33,7 @@
 .ol-viewport .ol-mouse-position {
   background-color: #FFFFFFB0;
   padding: 1px 5px;
+  font-size: medium;
   font-family: "Courier New", courier, monospace;
   white-space: pre;
 }
@@ -98,6 +103,9 @@
   left: 10px;
   top: 5px;
   z-index: 80;
+}
+.ol-viewport .layer-switcher .layer-list .layer .title {
+  margin-left: 3px;
 }
 .ol-viewport .layer-switcher .layer-list .panel {
   background-color: black;
