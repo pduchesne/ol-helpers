@@ -108,14 +108,15 @@ ol.control.HilatsLayerSwitcher.prototype.renderBaseLayerSelector = function() {
 ol.control.HilatsLayerSwitcher.prototype.renderBaseLayer = function(baselayer) {
     var $select = $(this.header).find(".baseLayerSelector select");
 
+    // use title to identify basemaps; ol_uid is not available in non-debug OL
     $select.append(
-        $('<option/>', {value: baselayer.ol_uid})
+        $('<option/>', {value: baselayer.get('title')})
             .prop("layer", baselayer)
             .text(baselayer.get('title'))
     )
 
     if (baselayer.getVisible())
-        $select.val(baselayer.ol_uid);
+        $select.val(baselayer.get('title'));
 
 };
 
