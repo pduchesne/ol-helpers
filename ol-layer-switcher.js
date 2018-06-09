@@ -213,7 +213,8 @@ ol.control.HilatsLayerSwitcher.prototype.renderLayer = function(lyr, container) 
         li.append(label);
 
         var stateListener = function() {
-            if (lyr.getSource().getState() == ol.source.State.LOADING) {
+            if (lyr.getSource().getState() == ol.source.State.LOADING ||
+                lyr.getSource().get('HL_state') == ol.source.State.LOADING) {
                 li.append("<div class='state simple_loader' style='display: inline-block; float:right'></div>")
             } else if (lyr.getSource().getState() == ol.source.State.ERROR) {
                 li.append("<i class='state fa fa-error' />")
@@ -224,7 +225,7 @@ ol.control.HilatsLayerSwitcher.prototype.renderLayer = function(lyr, container) 
 
         stateListener();
 
-        lyr.getSource().on('change', stateListener);
+        lyr.getSource().on('change:HL_state', stateListener);
     }
 
     if (container)

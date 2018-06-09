@@ -29,12 +29,15 @@ if (!ol.source.State) {
     };
 }
 
-var OLgetState = ol.source.Vector.prototype.getState
+/* override source state property with internal value to have finer event listening on layer loading */
+var OLgetState = ol.source.Vector.prototype.getState;
 ol.source.Vector.prototype.getState = function() {
-    return this.HL_state || OLgetState.call(this);
+    return this.get('HL_state') || OLgetState.call(this);
 };
 ol.source.Vector.prototype.setState = function(state) {
-    this.HL_state = state;
+    this.set('HL_state', state);
+
+    // listeners on 'change' will not trigger on 'change:HL_state'. Must issue a 'change' explicitly
     this.changed();
 };
 
@@ -440,16 +443,34 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         var _this = this
 
         var layerStarts = function(event) {
-            var loadingObj = event.tile || event.target || this;
+            var loadingObj = event.tile || event.target || layer.getSource();
+
+            if (event.tile) {
+                layer.getSource().loadingTiles = layer.getSource().loadingTiles || [];
+                layer.getSource().loadingTiles.push(event.tile);
+            }
+
+            if (layer.getSource().get('HL_state') != ol.source.State.LOADING)
+                layer.getSource().set('HL_state', ol.source.State.LOADING);
+
             if (_this.loadingObjects.indexOf(loadingObj) < 0) {
                 _this.loadingObjects.push(loadingObj)
             }
-            _this.updateLoadingStatus()
+            _this.updateLoadingStatus();
         }
 
         var layerEnds = function(event) {
-            var loadingObj = event.tile || event.target || this;
+            var loadingObj = event.tile || event.target || layer.getSource();
 
+            if (event.tile && layer.getSource().loadingTiles) {
+                var tileIdx = layer.getSource().loadingTiles.indexOf(event.tile);
+                tileIdx >= 0 && layer.getSource().loadingTiles.splice(tileIdx, 1);
+            }
+
+            if (!layer.getSource().loadingTiles || layer.getSource().loadingTiles.length == 0) {
+                if (layer.getSource().get('HL_state') != ol.source.State.READY)
+                    layer.getSource().set('HL_state', ol.source.State.READY);
+            }
 
             var es_idx = _this.erroredSources.indexOf(loadingObj);
             if (this.getState() == ol.source.State.ERROR) {
