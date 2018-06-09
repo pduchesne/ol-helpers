@@ -151,6 +151,14 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         return !isNaN(parseFloat(n)) && isFinite(n);
     }
 
+    var unnamespace = function(str) {
+        if (!str)
+            return str;
+
+        var idx = str.indexOf(':');
+        return idx < 0 ? str : str.substring(idx+1);
+    }
+
     // When possible, override decimal parsers, as some capabilities use commas as decimal separator
     // (e.g. http://geoservices.wallonie.be/arcgis/services/EAU/ALEA_2016/MapServer/WMSServer)
     var originalReadDecimal = ol.format && ol.format.XSD && ol.format.XSD.readDecimalString;
@@ -1168,6 +1176,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 ftNames = undefined
         }
 
+        // remove namespaces from feature type names
+        // name coming from ISO md is sometimes namespaced, while actual feature type ID is not
+        ftNames && (ftNames = ftNames.map(unnamespace));
+
         var deferredResult = $.Deferred()
         url = OL_HELPERS.cleanOGCUrl(url)
         fetchWFSCapas(
@@ -1184,7 +1196,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
                 var candidates = capas.featureTypes
                 if (ftNames) candidates = capas.featureTypes.filter(function (ft) {
-                    return ftNames.indexOf(ft.name) >= 0;
+                    return ftNames.indexOf(unnamespace(ft.name)) >= 0;
                 })
 
                 var deferredLayers = []
@@ -1738,6 +1750,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 layerNames = undefined
         }
 
+        // remove namespaces from layer names
+        // name coming from ISO md is sometimes namespaced, while actual layer ID is not
+        layerNames && (layerNames = layerNames.map(unnamespace));
+
         parseWMSCapas(
             capaUrl,
             undefined, /* version */
@@ -1750,7 +1766,10 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                 var isFirst = true;
                 var processLayerCandidate = function (candidate) {
 
-                    if (candidate.Name && (!layerNames || layerNames.indexOf(candidate.Name) >= 0) ) {
+                    if (candidate.Name &&
+                        (!layerNames ||
+                         layerNames.indexOf(unnamespace(candidate.Name)) >= 0)
+                       ) {
                         var deferredLayer = $.Deferred()
                         deferredLayers.push(deferredLayer)
 
