@@ -896,7 +896,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         if (version === undefined) {
             // try to force 1.3.0
-            return parseWMSCapas(url, "1.3.0", callback)
+            return parseWMSCapas(url, "1.3.0", callback, failCallback)
                 .catch(function(err) {
                     // if it fails, let the server choose the version
                     return parseWMSCapas(url, "auto", callback, failCallback)
