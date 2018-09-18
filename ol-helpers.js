@@ -169,9 +169,17 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
 
+    /* add LonLat 4326 definition as default - TODO: isn't this breaking support of certain services ?*/
+    var EPSG4326_LONGURL = new ol.proj.Projection({
+        code: 'http://www.opengis.net/gml/srs/epsg.xml#4326',
+        axis: 'enu'
+    });
+    ol.proj.addEquivalentProjections([ol.proj.get('EPSG:4326'), EPSG4326_LONGURL]);
+
     var EPSG4326 = OL_HELPERS.EPSG4326 = ol.proj.get("EPSG:4326")
     var EPSG4326_LONG = OL_HELPERS.EPSG4326_LONG = ol.proj.get('urn:ogc:def:crs:EPSG:6.6:4326')
     var EPSG4326_LONLAT = OL_HELPERS.EPSG4326_LONLAT = createEPSG4326Proj('EPSG:4326', 'enu')
+    var EPSG4326_LATLON = OL_HELPERS.EPSG4326_LATLON = createEPSG4326Proj('EPSG:4326', 'neu')
     var Mercator = OL_HELPERS.Mercator = ol.proj.get("EPSG:3857")
     var WORLD_BBOX = OL_HELPERS.WORLD_BBOX = [-180, -90, 180, 90]
     var WORLD_BBOX_MERCATOR = OL_HELPERS.WORLD_BBOX_MERCATOR = ol.proj.transformExtent(OL_HELPERS.WORLD_BBOX, OL_HELPERS.EPSG4326, OL_HELPERS.Mercator)
@@ -1371,18 +1379,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                                 var gmlFormat = gmlFormatVersion == 'GML2' ? new ol.format.GML2() : new ol.format.GML3();
 
                                                 if (gmlFormatVersion == 'GML2' && isLonLat4326) {
-                                                    // Overload parseCoordinates method to force lon/lat parsing
 
-                                                    /*
-                                                     var originalMethod = gmlFormat.readFlatCoordinatesFromNode_;
-                                                     gmlFormat.readFlatCoordinatesFromNode_ = function(node, objectStack) {
-                                                     // use special lon/lat projection defined above
-                                                     objectStack[0]['srsName'] = 'EPSG:4326:LONLAT';
-                                                     return originalMethod.call(this, node, objectStack);
-                                                     }
-                                                     */
-
-
+                                                    // force lon/lat parsing when needed
+                                                    // WARN this overloading works only with ol-debug lib !
                                                     gmlFormat.readGeometryElement = function (node, objectStack) {
                                                         var context = (objectStack[0]);
                                                         if (node.firstElementChild.getAttribute('srsName') == 'http://www.opengis.net/gml/srs/epsg.xml#4326')
@@ -1678,8 +1677,13 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             })
             .then(
             function (openAPIclient) {
-
-                openAPIclient.apis.Capabilities.describeCollections({f: 'json'}).then(
+                //openAPIclient.apis.server.get_collections({f: 'json'})
+                var collectionsGetter =
+                    (openAPIclient.apis.Capabilities && openAPIclient.apis.Capabilities.describeCollections) ||
+                    (openAPIclient.apis.Collections && openAPIclient.apis.Collections.describeCollections) ||
+                    (openAPIclient.apis.FeatureSets && openAPIclient.apis.FeatureSets.describeCollections) ||
+                    (openAPIclient.apis.server && openAPIclient.apis.server.get_collections);
+                collectionsGetter({f: 'json'}).then(
                     function (capas) {
 
 
@@ -1711,13 +1715,19 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
                                     var params = {
                                         f: 'json',
-                                        count: MAX_FEATURES,
-                                        bbox: bbox4326.join(',')
+                                        limit: MAX_FEATURES,
+                                        bbox: bbox4326.join(','),
+                                        collectionId: candidate.name
                                     }
 
                                     this.setState(ol.source.State.LOADING);
-                                    var getOpName = openAPIclient.spec.paths['/' + candidate.name].get.operationId;
-                                    return openAPIclient.apis.Features[getOpName](params).then(
+                                    var path =
+                                        openAPIclient.spec.paths['/' + candidate.name] ||
+                                        openAPIclient.spec.paths['/collections/{collectionId}/items'] ||
+                                        openAPIclient.spec.paths['/collections/' + candidate.name + '/items'];
+                                    var getOpName = path.get.operationId;
+                                    var operation = openAPIclient.apis.Features[getOpName]
+                                    return operation(params).then(
                                         function (result) {
                                             if (result.parseError) {
                                                 throw "Parse Error: " + result.parseError.message;
@@ -1725,12 +1735,11 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                                             // make sure we have IDs for every feature
                                             result.obj.features.forEach(function (jsonFeature) {
                                                 if (jsonFeature.id === undefined) {
-                                                    if (jsonFeature.ID) {
-                                                        jsonFeature.id = jsonFeature.ID;
-                                                    } else {
+                                                    jsonFeature.id = jsonFeature.ID || (jsonFeature.properties && jsonFeature.properties.gmlid)
+                                                    if (! jsonFeature.id) {
                                                         // generate fid from properties hash to avoid multiple insertion of same feature
                                                         // (when max_features strategy is applied and features have no intrisic ID)
-                                                        var hashkey = JSON.stringify(jsonFeature);
+                                                        var hashkey = JSON.stringify(jsonFeature).hashCode();
                                                         jsonFeature.id = hashkey;
                                                     }
                                                 }
@@ -1761,10 +1770,17 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                             })
 
                             ftSource.getFeatureById = function (id) {
-                                var getFeatureByIdOpName = openAPIclient.spec.paths['/' + candidate.name + '/{id}'].get.operationId;
-                                var promise = $.Deferred();
                                 // try both the 'Features' and 'Feature' tags. Not sure which one is correct, check the spec.
-                                (openAPIclient.apis.Features[getFeatureByIdOpName] || openAPIclient.apis.Feature[getFeatureByIdOpName])({id: id, f: 'json'}).then(
+                                var featuresApi = openAPIclient.apis.Features || openAPIclient.apis.Feature;
+                                var path =
+                                    openAPIclient.spec.paths['/' + candidate.name+ '/{id}'] ||
+                                    openAPIclient.spec.paths['/collections/{collectionId}/items/{featureId}'] ||
+                                    openAPIclient.spec.paths['/collections/' + candidate.name + '/items/{featureId}'];
+                                var getFeatureByIdOpName = path ? path.get.operationId : 'getFeature';
+                                var getFeatureOp = featuresApi[getFeatureByIdOpName];
+                                var promise = $.Deferred();
+                                // in doubt, try to use collectionId, featureId, id
+                                getFeatureOp({collectionId: candidate.name, featureId: id, id: id, f: 'json'}).then(
                                     function (result) {
                                         if (result.parseError) {
                                             throw "Parse Error: " + result.parseError.message;
@@ -1797,7 +1813,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
                             var ftLayer = new ol.layer.Vector({
                                 style: OL_HELPERS.DEFAULT_STYLEMAP.default,
-                                title: candidate.title,
+                                title: candidate.title || candidate.name,
                                 source: ftSource,
                                 visible: idx == 0 || ftNames != undefined
                             });
