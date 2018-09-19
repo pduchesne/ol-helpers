@@ -763,7 +763,9 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
             return evt.coordinate;
         }
 
-        this.hoveredFeatures = [];
+        this.displayedFeatures = [];
+
+        this.onDisplayedFeaturesChange = options.onDisplayedFeaturesChange;
 
         this.on('change:map', function(evt) {
             this.HL_handleMapChanged();
@@ -772,6 +774,11 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     ol.inherits(OL_HELPERS.FeatureInfoOverlay, ol.Overlay);
 
     OL_HELPERS.FeatureInfoOverlay.prototype.setFeatures = function(features, displayDetails) {
+        if (this.onDisplayedFeaturesChange)
+            this.onDisplayedFeaturesChange(this.displayedFeatures, features);
+
+        this.displayedFeatures = features;
+
         var popupContent = $(this.getElement()).find('.popupContent');
 
         if (features.length == 0) {
@@ -807,24 +814,23 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                         if (feature && (!_this.filter || _this.filter(feature, layer))) // sometimes feature is undefined (?!)
                             features.push(feature);
                         feature.layer = layer
-                        if (_this.hoveredFeatures.indexOf(feature) < 0) {
+                        if (_this.displayedFeatures.indexOf(feature) < 0) {
                             changed = true
                         }
                     }
                 });
 
-                changed = !$_.isEqual(features, _this.hoveredFeatures)
+                changed = !$_.isEqual(features, _this.displayedFeatures)
 
                 if (changed) {
                     if (_this.displayDetailsTimeout)
                         clearTimeout(_this.displayDetailsTimeout)
-                    _this.hoveredFeatures = features;
-                    _this.setFeatures(_this.hoveredFeatures);
+                    _this.setFeatures(features);
                     if (_this.showDetails)
-                        _this.displayDetailsTimeout = setTimeout(function() {_this.setFeatures(_this.hoveredFeatures, true);}, 500);
+                        _this.displayDetailsTimeout = setTimeout(function() {_this.setFeatures(_this.displayedFeatures, true);}, 500);
                 }
 
-                if (_this.hoveredFeatures.length > 0) {
+                if (_this.displayedFeatures.length > 0) {
                     _this.setPosition(_this.computePosition(features, evt));
                 }
 
