@@ -170,11 +170,13 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     var $_ = _ // keep pointer to underscore, as '_' will may be overridden by a closure variable when down the stack
 
     /* add LonLat 4326 definition as default - TODO: isn't this breaking support of certain services ?*/
+    /*
     var EPSG4326_LONGURL = new ol.proj.Projection({
         code: 'http://www.opengis.net/gml/srs/epsg.xml#4326',
         axis: 'enu'
     });
     ol.proj.addEquivalentProjections([ol.proj.get('EPSG:4326'), EPSG4326_LONGURL]);
+     */
 
     var EPSG4326 = OL_HELPERS.EPSG4326 = ol.proj.get("EPSG:4326")
     var EPSG4326_LONG = OL_HELPERS.EPSG4326_LONG = ol.proj.get('urn:ogc:def:crs:EPSG:6.6:4326')
