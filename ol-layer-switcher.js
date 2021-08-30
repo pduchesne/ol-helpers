@@ -27,9 +27,9 @@ ol.control.HilatsLayerSwitcher = function(opt_options) {
     var layerList = $("<div class='ol-unselectable ol-control layer-list'><div class='padder'></div></div>");
 
     var progressIndicator =  $("<div class='stacked-layers'>" +
-                                "<div class='stacked-layer layer-1'/>" +
-                                "<div class='stacked-layer layer-2'/>" +
-                                "<div class='stacked-layer layer-3'/></div>")
+                                "<div class='stacked-layer layer-1'></div>" +
+                                "<div class='stacked-layer layer-2'></div>" +
+                                "<div class='stacked-layer layer-3'></div></div>")
     this.parentElement
         .append(progressIndicator)
         .append(this.header)
