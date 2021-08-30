@@ -2659,9 +2659,7 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
                         type: isBaseLayer ? 'base' : undefined, // necessary for ol3-layerswitcher
                         source: new ol.source.OSM({
                             url: urls,
-                            /* TODO
-                             attribution: mapConfig.attribution
-                             */
+                            attributions: mapConfig.attribution
                         })
                     });
 
@@ -2989,7 +2987,8 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
 
         var controls = [
             new ol.control.ZoomSlider(),
-            mousePosControl
+            mousePosControl,
+            new ol.control.Attribution({collapsed: false})
         ]
         layerSwitcher && controls.push(layerSwitcher);
         featureDetailsControl && controls.push(featureDetailsControl);
